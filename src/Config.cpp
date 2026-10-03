@@ -4,7 +4,7 @@
 #define DEBUG_PRINT if(DEBUG)Serial
 #define DEBUG_PRINTF if(DEBUG)printf
 
-Config::Config(std::string_view filePath) : FilePath(filePath) {}
+Config::Config(const std::string_view filePath) : FilePath(filePath) {}
 
 void Config::load() {
     if (!LittleFS.exists(FilePath.data())) {
@@ -15,7 +15,7 @@ void Config::load() {
     File file = LittleFS.open(FilePath.data(), "r");
 
     JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, file);
+    const DeserializationError error = deserializeJson(doc, file);
     file.close();
 
     if (error) {
@@ -27,14 +27,12 @@ void Config::load() {
     Debug = doc["debug"] | false;
 }
 
-std::string_view Config::getFilePath() {
+std::string_view Config::getFilePath() const {
     return FilePath;
 }
 
-void Config::save(uint8_t *data, size_t len, size_t index, size_t total) {
-    File file = LittleFS.open(FilePath.data(), (index == 0) ? FILE_WRITE : FILE_APPEND);
-
-    if (file) {
+void Config::save(const uint8_t *data, const size_t len, const size_t index, const size_t total) {
+    if (File file = LittleFS.open(FilePath.data(), (index == 0) ? FILE_WRITE : FILE_APPEND)) {
         file.write(data, len);
         file.close();
     }

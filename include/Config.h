@@ -10,13 +10,12 @@
 
 class Config {
     public:
-        Config(std::string_view filePath);
+        explicit Config(std::string_view filePath);
         void load();
-        void save(uint8_t *data, size_t len, size_t index, size_t total);
-        void save(JsonVariantConst& doc);
-        std::string_view getFilePath();
+        void save(const uint8_t *data, size_t len, size_t index, size_t total);
+        [[nodiscard]] std::string_view getFilePath() const;
     private:
-        bool Debug;
+        bool Debug{};
         std::string_view FilePath;
 };
 
