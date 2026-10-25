@@ -1,5 +1,8 @@
 # Weekly dependency updates as pull requests, titled as conventional commits so they pass CI.
 # chore(deps) releases nothing by itself; the updates ship with the next feat or fix.
+#
+# Minor and patch updates come grouped in one pull request per directory. Major updates come one
+# per pull request, so one that breaks the build doesn't hold the safe ones back.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -11,7 +14,14 @@ updates:
       include: scope
     groups:
       ui:
-        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # svelte-check only supports TypeScript up to 6
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Types for the Node version CI runs (22), not the newest Node
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: npm
     directory: /
@@ -22,7 +32,7 @@ updates:
       include: scope
     groups:
       release-tools:
-        patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: github-actions
     directory: /

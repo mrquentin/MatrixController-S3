@@ -20,6 +20,11 @@ permissions:
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
+    # A called workflow gets at most what its caller grants, and GitHub refuses to start the run
+    # if any of its jobs asks for more, even one that's skipped here (the PR title check)
+    permissions:
+      contents: read
+      pull-requests: read
 
   release:
     name: Release
