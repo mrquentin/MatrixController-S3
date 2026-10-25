@@ -54,7 +54,8 @@ Color readColor(const JsonVariantConst value, const Color fallback) {
 }
 
 void writeColor(JsonObject config, const char* key, const Color color) {
-    char text[8];
+    // toHex() fits in 24 bits, but the compiler can't tell and warns about "#%06lX" overflowing 8
+    char text[12];
     snprintf(text, sizeof(text), "#%06lX", static_cast<unsigned long>(color.toHex()));
     config[key] = text;
 }
