@@ -4,39 +4,45 @@
     import {busyStore} from "$lib/services/busy.svelte";
     import {ENDPOINTS} from "$lib/config";
     import {onMount} from "svelte";
+    import PageHeader from "$lib/PageHeader.svelte";
+    import Icon from "$lib/Icon.svelte";
 
-    let status = $state<ApiResponse<SystemStatus>>({error: null, loading: false, data: {
-            cpuFreqMHz: 0,
-            chipModel: '',
-            memoryFreeHeap: 0,
-            memoryMaxBlock: 0,
-            memoryMinFreeHeap: 0,
-            psramFree: 0,
-            psramSize: 0,
-            wifiChannel: 0,
-            wifiConnected: false,
-            wifiGatewayIp: '',
-            wifiIp: '',
-            wifiMACAddress: '',
-            wifiMDNSName: '',
-            wifiQuality: 0,
-            wifiRssi: 0,
-            uptimeSeconds: 0,
-            resetReason: ''
-        }});
+    let status = $state<ApiResponse<SystemStatus>>({error: null, loading: false, data: null});
+    let refreshing = $state(false);
 
     let uptime = $derived.by(() => {
-        if (!status || !status.data) return;
-        const h = Math.floor(status.data.uptimeSeconds / 3600).toString().padStart(2, '0');
-        const m = Math.floor((status.data.uptimeSeconds % 3600)/60).toString().padStart(2, '0');
-        const s = (status.data.uptimeSeconds % 60).toString().padStart(2, '0');
-        return `${h}:${m}:${s}`;
+        if (!status.data) return '';
+        const total = status.data.uptimeSeconds;
+        const d = Math.floor(total / 86400);
+        const h = Math.floor((total % 86400) / 3600).toString().padStart(2, '0');
+        const m = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
+        const s = (total % 60).toString().padStart(2, '0');
+        return `${d > 0 ? `${d}d ` : ''}${h}:${m}:${s}`;
     })
 
+    let psramUsed = $derived(status.data && status.data.psramSize > 0
+        ? (status.data.psramSize - status.data.psramFree) / status.data.psramSize : 0);
+
+    // Brownouts mean the panel pulled the supply down, so they are worth calling out
+    let resetIsFault = $derived(['BROWNOUT', 'PANIC', 'INTERRUPT_WATCHDOG', 'TASK_WATCHDOG', 'WATCHDOG'].includes(status.data?.resetReason ?? ''));
+
+    function formatBytes(bytes: number): string {
+        if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+        return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    function humanize(value: string): string {
+        if (!/^[A-Z_]+$/.test(value)) return value;
+        const text = value.replaceAll('_', ' ').toLowerCase();
+        return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
     async function load() {
+        refreshing = true;
         await busyStore.run(async () => {
             status = await apiRequest<SystemStatus>(ENDPOINTS.GET_SYSTEM_STATUS);
         });
+        refreshing = false;
     }
 
     onMount(() => {
@@ -50,131 +56,90 @@
     })
 </script>
 
-<div class="p-2">
-    <div class="flex items-center justify-between mb-4">
-        <button class="btn btn-sm" onclick="{() => {load()}}" title="refresh">
-            <svg class="size-[1.2em]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path fill-rule="evenodd" d="M4.755 10.059a7.5 7.5 0 0 1 12.548-3.364l1.903 1.903h-3.183a.75.75 0 1 0 0 1.5h4.992a.75.75 0 0 0 .75-.75V4.356a.75.75 0 0 0-1.5 0v3.18l-1.9-1.9A9 9 0 0 0 3.306 9.67a.75.75 0 1 0 1.45.388Zm15.408 3.352a.75.75 0 0 0-.919.53 7.5 7.5 0 0 1-12.548 3.364l-1.902-1.903h3.183a.75.75 0 0 0 0-1.5H2.984a.75.75 0 0 0-.75.75v4.992a.75.75 0 0 0 1.5 0v-3.18l1.9 1.9a9 9 0 0 0 15.059-4.035.75.75 0 0 0-.53-.918Z" clip-rule="evenodd" />
-            </svg>
+<PageHeader title="Status">
+    {#snippet actions()}
+        <button class="btn btn-sm btn-ghost pressable gap-1.5 rounded-full text-primary" onclick={load} disabled={refreshing}>
+            <Icon name="refresh" class="size-4 {refreshing ? 'animate-spin' : ''}" strokeWidth={2}/>
             Refresh
         </button>
+    {/snippet}
+</PageHeader>
+
+{#if status.error}
+    <div role="alert" class="mb-6 flex items-start gap-3 rounded-box bg-error/10 px-4 py-3 text-error">
+        <Icon name="warning" class="mt-0.5 size-5 shrink-0"/>
+        <div>
+            <p class="font-semibold">Couldn't reach the controller</p>
+            <p class="text-[0.875rem] opacity-80">{status.error}</p>
+        </div>
     </div>
+{/if}
 
-    {#if status.error}
-        <div role="alert" class="alert alert-error mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>{status.error}</span>
+{#if status.data}
+    {@const data = status.data}
+    <div class="grid items-start gap-8 md:grid-cols-2 md:gap-6">
+
+        <section>
+            <h2 class="section-header">Wi-Fi</h2>
+            <div class="grouped">
+                <div class="grouped-row">
+                    <span>Network</span>
+                    <span class="row-value flex items-center justify-end gap-2">
+                        <span class="size-2 rounded-full {data.wifiConnected ? 'bg-success' : 'bg-error'}"></span>
+                        {data.wifiConnected ? 'Connected' : 'Disconnected'}
+                    </span>
+                </div>
+                <div class="grouped-row">
+                    <span>Signal</span>
+                    <span class="row-value flex items-center justify-end gap-2">
+                        <!-- Four bars, filled by quality -->
+                        <span class="flex h-3 items-end gap-0.5" aria-hidden="true">
+                            {#each [25, 50, 75, 100] as threshold, i}
+                                <span class="w-[3px] rounded-[1px] {data.wifiQuality >= threshold - 12 ? 'bg-base-content/70' : 'bg-base-content/15'}"
+                                      style="height: {(i + 1) * 25}%"></span>
+                            {/each}
+                        </span>
+                        {data.wifiQuality}% · {data.wifiRssi} dBm
+                    </span>
+                </div>
+                <div class="grouped-row"><span>IP address</span><span class="row-value select-all">{data.wifiIp}</span></div>
+                <div class="grouped-row"><span>Hostname</span><span class="row-value select-all">{data.wifiMDNSName}.local</span></div>
+                <div class="grouped-row"><span>Channel</span><span class="row-value">{data.wifiChannel}</span></div>
+                <div class="grouped-row"><span>Gateway</span><span class="row-value select-all">{data.wifiGatewayIp}</span></div>
+                <div class="grouped-row"><span>MAC address</span><span class="row-value select-all font-mono text-[0.8125rem]">{data.wifiMACAddress}</span></div>
+            </div>
+        </section>
+
+        <div class="grid gap-8 md:gap-6">
+            <section>
+                <h2 class="section-header">System</h2>
+                <div class="grouped">
+                    <div class="grouped-row"><span>Chip</span><span class="row-value">{data.chipModel}</span></div>
+                    <div class="grouped-row"><span>Processor</span><span class="row-value">{data.cpuFreqMHz} MHz</span></div>
+                    <div class="grouped-row"><span>Uptime</span><span class="row-value">{uptime}</span></div>
+                    <div class="grouped-row">
+                        <span>Last reset</span>
+                        <span class="row-value {resetIsFault ? 'font-medium text-warning' : ''}">{humanize(data.resetReason)}</span>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2 class="section-header">Memory</h2>
+                <div class="grouped">
+                    <div class="grouped-row"><span>Free heap</span><span class="row-value">{formatBytes(data.memoryFreeHeap)}</span></div>
+                    <div class="grouped-row"><span>Largest block</span><span class="row-value">{formatBytes(data.memoryMaxBlock)}</span></div>
+                    <div class="grouped-row"><span>Lowest free heap</span><span class="row-value">{formatBytes(data.memoryMinFreeHeap)}</span></div>
+                    <div class="grouped-row flex-col items-stretch gap-2 py-3">
+                        <div class="flex items-center">
+                            <span>PSRAM</span>
+                            <span class="row-value">{formatBytes(data.psramSize - data.psramFree)} of {formatBytes(data.psramSize)}</span>
+                        </div>
+                        <progress class="progress progress-primary h-1.5" value={psramUsed} max="1"></progress>
+                    </div>
+                </div>
+            </section>
         </div>
-    {/if}
 
-    {#if status.data }
-        <div class="grid gap-4 md:grid-cols-2 items-start">
-
-            <!-- WiFi -->
-            <div class="card p-4 shadow-sm overflow-x-auto">
-                <div class="text-base p-2 font-semibold mb-2 flex uppercase">
-                    WiFi
-                </div>
-                <table class="table table-sm">
-                    <tbody>
-                    <tr>
-                        <th>WiFi Status</th>
-                        <td>
-                            <div class="inline-grid *:[grid-area:1/1] align-middle">
-                                <div class="status {status.data.wifiConnected ? 'status-success' : 'status-error'} animate-ping"></div>
-                                <div class="status {status.data.wifiConnected ? 'status-success' : 'status-error'}"></div>
-                            </div>
-                            {status.data.wifiConnected ? 'Connected' : 'Disconnected'}
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>WiFi Quality</th>
-                        <td>{status.data.wifiQuality} ({status.data.wifiRssi}dB)</td>
-                    </tr>
-                    <tr>
-                        <th>IP</th>
-                        <td>{status.data.wifiIp}</td>
-                    </tr>
-                    <tr>
-                        <th>MDNS Name</th>
-                        <td>{status.data.wifiMDNSName}</td>
-                    </tr>
-                    <tr>
-                        <th>WiFi Channel</th>
-                        <td>{status.data.wifiChannel}</td>
-                    </tr>
-                    <tr>
-                        <th>WiFi Gateway IP</th>
-                        <td>{status.data.wifiGatewayIp}</td>
-                    </tr>
-                    <tr>
-                        <th>WiFi MAC Address</th>
-                        <td>{status.data.wifiMACAddress}</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Memory -->
-            <div class="card p-4 shadow-sm overflow-x-auto">
-                <div class="text-base p-2 font-semibold mb-2 flex uppercase">
-                    Memory
-                </div>
-                <table class="table table-sm">
-                    <tbody>
-                    <tr>
-                        <th>Free Heap</th>
-                        <td>{status.data.memoryFreeHeap.toLocaleString()}</td>
-                    </tr>
-                    <tr>
-                        <th>Max Block</th>
-                        <td>{status.data.memoryMaxBlock.toLocaleString()}</td>
-                    </tr>
-                    <tr>
-                        <th>Min Free Heap</th>
-                        <td>{status.data.memoryMinFreeHeap.toLocaleString()}</td>
-                    </tr>
-                    <tr>
-                        <th>PSRAM Size</th>
-                        <td>{status.data.psramSize.toLocaleString()}</td>
-                    </tr>
-                    <tr>
-                        <th>PSRAM Free</th>
-                        <td>{status.data.psramFree.toLocaleString()}</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- System -->
-            <div class="card p-4 shadow-sm overflow-x-auto">
-                <div class="text-base p-2 font-semibold mb-2 flex uppercase">
-                    System
-                </div>
-                <table class="table table-sm">
-                    <tbody>
-                    <tr>
-                        <th>ESP32 Type</th>
-                        <td>{status.data.chipModel}</td>
-                    </tr>
-                    <tr>
-                        <th>Processor Frequency</th>
-                        <td>{status.data.cpuFreqMHz} MHz</td>
-                    </tr>
-                    <tr>
-                        <th>Uptime</th>
-                        <td>{uptime}</td>
-                    </tr>
-                    <tr>
-                        <th>Last Reset</th>
-                        <td>{status.data.resetReason}</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-
-        </div>
-    {/if}
-</div>
+    </div>
+{/if}

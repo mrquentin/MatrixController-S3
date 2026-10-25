@@ -26,6 +26,7 @@ void Config::load() {
 
     Debug = doc["debug"] | false;
     Display = parseDisplayConfig(doc["display"]);
+    Timezone = doc["timezone"] | "UTC0";
 }
 
 DisplayConfig Config::parseDisplayConfig(const JsonObjectConst json) {
@@ -64,6 +65,10 @@ bool Config::isDebug() const {
 
 const DisplayConfig& Config::getDisplayConfig() const {
     return Display;
+}
+
+const std::string& Config::getTimezone() const {
+    return Timezone;
 }
 
 void Config::onSaved(SavedCallback callback) {

@@ -28,4 +28,29 @@ export interface DisplayConfig {
 export interface SystemConfig {
     debug: boolean;
     display: DisplayConfig;
+    // POSIX TZ string, see TIMEZONES in config.ts
+    timezone: string;
+}
+
+// One setting of an app, as described by the firmware's ConfigSchema
+export type AppField = { key: string; label: string } & (
+    | { type: 'text'; maxLength: number }
+    | { type: 'number'; min: number; max: number }
+    | { type: 'bool' }
+    | { type: 'color' }
+    | { type: 'select'; options: { value: string; label: string }[] }
+);
+
+export type AppConfig = Record<string, string | number | boolean>;
+
+export interface AppInfo {
+    id: string;
+    name: string;
+    schema: AppField[];
+    config: AppConfig;
+}
+
+export interface AppsState {
+    active: string | null;
+    apps: AppInfo[];
 }

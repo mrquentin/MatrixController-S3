@@ -14,13 +14,14 @@
 #define DEBUG_PRINT if(DEBUG)Serial
 #define DEBUG_PRINTF if(DEBUG)printf
 
-HttpHandlers::HttpHandlers(Config& config, AsyncWebServer &server, SystemManager &systemManager) :
-    _config(config), _server(server), _systemManager(systemManager) {}
+HttpHandlers::HttpHandlers(Config& config, AsyncWebServer &server, SystemManager &systemManager, AppManager &appManager) :
+    _config(config), _server(server), _systemManager(systemManager), _appManager(appManager) {}
 
 void HttpHandlers::setup() {
     addHandlerRoot();
     addHandlerApiStatus();
     addHandlerApiConfig();
+    addHandlerApiApps();
 
     _server.onNotFound([](AsyncWebServerRequest *request) {
         if (request->method() == HTTP_OPTIONS) {
@@ -99,4 +100,47 @@ void HttpHandlers::addHandlerApiConfig(){
         }
     });
 
+}
+
+void HttpHandlers::addHandlerApiApps() {
+    _server.on("/api/apps", HTTP_GET, [&](AsyncWebServerRequest *request) {
+        JsonDocument doc;
+        _appManager.describe(doc.to<JsonObject>());
+
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
+
+    // Body: {"id": "clock"}
+    _server.addHandler(new AsyncCallbackJsonWebHandler("/api/apps/active", [&](AsyncWebServerRequest *request, JsonVariant &json) {
+        DEBUG_PRINTF("Request to %s\n", request->url().c_str());
+        const char* id = json["id"];
+        if (!id || !_appManager.activate(id)) {
+            request->send(404, "application/json", "{\"result\":\"error\",\"details\":\"unknown app\"}");
+            return;
+        }
+        request->send(200, "application/json", "{\"result\":\"success\"}");
+    }));
+
+    // Body: {"id": "clock", "config": {...}}. Responds with the settings the app actually applied
+    _server.addHandler(new AsyncCallbackJsonWebHandler("/api/apps/config", [&](AsyncWebServerRequest *request, JsonVariant &json) {
+        DEBUG_PRINTF("Request to %s\n", request->url().c_str());
+        const char* id = json["id"];
+        const JsonObjectConst config = json["config"];
+        if (!id || config.isNull()) {
+            request->send(400, "application/json", "{\"result\":\"error\",\"details\":\"id and config are required\"}");
+            return;
+        }
+
+        JsonDocument doc;
+        if (!_appManager.setConfig(id, config, doc["config"].to<JsonObject>())) {
+            request->send(404, "application/json", "{\"result\":\"error\",\"details\":\"unknown app\"}");
+            return;
+        }
+
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    }));
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <string>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include "display/DisplayConfig.h"
@@ -20,6 +21,8 @@ class Config {
         [[nodiscard]] std::string_view getFilePath() const;
         [[nodiscard]] bool isDebug() const;
         [[nodiscard]] const DisplayConfig& getDisplayConfig() const;
+        /// POSIX TZ string, e.g. "CET-1CEST,M3.5.0,M10.5.0/3". Used for local time on the board.
+        [[nodiscard]] const std::string& getTimezone() const;
         /// Called after a config uploaded by save() has been reloaded. Runs on the web server task.
         void onSaved(SavedCallback callback);
     private:
@@ -27,6 +30,7 @@ class Config {
 
         bool Debug{};
         DisplayConfig Display;
+        std::string Timezone = "UTC0";
         std::string_view FilePath;
         SavedCallback OnSaved;
 };
