@@ -18,6 +18,7 @@ pio run -e ota -t upload      # or over WiFi, with MATRIX_UPDATE_PASSWORD set
 On first start the panel shows a QR code for its setup network to pick a WiFi network. The web UI is then at
 http://matrixcontroller.local. Firmware updates can be installed from its Settings → Firmware page,
 either a `firmware.bin` or the latest GitHub release; they need the update password set on that page.
+The controller looks for new releases by itself twice a day and flags them there.
 
 ## Tests
 

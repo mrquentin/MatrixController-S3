@@ -64,7 +64,9 @@ export interface ReleaseStatus {
     latest?: string;
     publishedAt?: string;
     size?: number;
+    // Newer than the running firmware
     updateAvailable?: boolean;
+    checkedSecondsAgo?: number;
     error?: string;
 }
 
