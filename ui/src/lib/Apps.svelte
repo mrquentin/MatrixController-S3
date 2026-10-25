@@ -18,6 +18,7 @@
     const APP_STYLE: Record<string, { icon: IconName, tint: string }> = {
         clock: { icon: 'clock', tint: 'bg-[#ff9500]' },
         text: { icon: 'text', tint: 'bg-[#007aff]' },
+        weather: { icon: 'cloud', tint: 'bg-[#32ade6]' },
     };
     const FALLBACK_STYLE = { icon: 'overview' as IconName, tint: 'bg-[#8e8e93]' };
 

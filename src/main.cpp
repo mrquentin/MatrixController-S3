@@ -12,6 +12,7 @@
 #include "apps/AppManager.h"
 #include "apps/ClockApp.h"
 #include "apps/TextApp.h"
+#include "apps/WeatherApp.h"
 #include "display/Hub75Display.h"
 #include "display/TestPattern.h"
 #include "display/Text.h"
@@ -32,6 +33,7 @@ Hub75Display display;
 
 TextApp textApp;
 ClockApp clockApp;
+WeatherApp weatherApp;
 
 // After setup() the test pattern stays up, then a screen with the IP address, then the apps start
 constexpr uint32_t TestPatternDurationMs = 3000;
@@ -106,6 +108,7 @@ void setup() {
     configTzTime(config.getTimezone().c_str(), "pool.ntp.org", "time.google.com");
 
     appManager.add(clockApp);
+    appManager.add(weatherApp);
     appManager.add(textApp);
     appManager.begin();
 
