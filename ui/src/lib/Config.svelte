@@ -2,14 +2,18 @@
     import {apiRequest, type ApiResponse} from "$lib/api";
     import type {SystemConfig} from "$lib/interfaces";
     import {busyStore} from "$lib/services/busy.svelte";
-    import {ENDPOINTS} from "$lib/config";
+    import {DEFAULT_DISPLAY_CONFIG, DISPLAY_HEIGHTS, ENDPOINTS, MAX_BRIGHTNESS} from "$lib/config";
     import {onMount} from "svelte";
 
     let { config, reload } = $props();
     let emptyRes = $state<ApiResponse<null>>({ data: null, error: null, loading: false });
 
     // svelte-ignore state_referenced_locally
-    let modifiedConfig = $state<SystemConfig>(config.data);
+    let modifiedConfig = $state<SystemConfig>({
+        ...config.data,
+        // Older config.json files have no display section
+        display: { ...DEFAULT_DISPLAY_CONFIG, ...config.data?.display }
+    });
 
     async function save() {
         await busyStore.run(async () => {
@@ -46,6 +50,35 @@
                     <input type="checkbox" bind:checked={modifiedConfig.debug} class="checkbox checkbox-info" />
                     Debug
                 </label>
+
+                <div class="divider text-sm">Matrix</div>
+
+                <div class="flex gap-4 mb-2">
+                    <label class="form-control w-full">
+                        <span class="label mb-1">Width (px)</span>
+                        <input type="number" min="16" max="256" step="1" bind:value={modifiedConfig.display.width} class="input input-sm w-full" />
+                    </label>
+                    <label class="form-control w-full">
+                        <span class="label mb-1">Height (px)</span>
+                        <select bind:value={modifiedConfig.display.height} class="select select-sm w-full">
+                            {#each DISPLAY_HEIGHTS as height}
+                                <option value={height}>{height}</option>
+                            {/each}
+                        </select>
+                    </label>
+                </div>
+
+                <label class="form-control w-full mb-2">
+                    <span class="label mb-1">Brightness ({modifiedConfig.display.brightness})</span>
+                    <input type="range" min="0" max={MAX_BRIGHTNESS} bind:value={modifiedConfig.display.brightness} class="range range-info range-sm" />
+                </label>
+
+                <label class="label mb-2">
+                    <input type="checkbox" bind:checked={modifiedConfig.display.doubleBuffer} class="checkbox checkbox-info" />
+                    Double buffering
+                </label>
+
+                <p class="text-xs opacity-60 mb-5">Matrix changes take effect after a reboot.</p>
 
 
                 <button class="btn btn-md btn-soft btn-info w-full" onclick={save}>

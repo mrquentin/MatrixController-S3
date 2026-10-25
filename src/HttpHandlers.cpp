@@ -70,6 +70,7 @@ void HttpHandlers::addHandlerApiStatus() {
         doc["wifiQuality"] = status.wifiQuality;
         doc["wifiRssi"] = status.wifiRssi;
         doc["uptimeSeconds"] = status.uptimeSeconds;
+        doc["resetReason"] = status.resetReason;
 
         String response;
         serializeJson(doc, response);

@@ -6,6 +6,26 @@
 #define DEBUG_PRINT if(DEBUG)Serial
 #define DEBUG_PRINTF if(DEBUG)printf
 
+namespace {
+    // Why the chip last restarted. BROWNOUT means the supply voltage sagged (e.g. the panel drew too much)
+    const char* resetReasonName(const esp_reset_reason_t reason) {
+        switch (reason) {
+            case ESP_RST_POWERON: return "POWER_ON";
+            case ESP_RST_EXT: return "EXTERNAL";
+            case ESP_RST_SW: return "SOFTWARE";
+            case ESP_RST_PANIC: return "PANIC";
+            case ESP_RST_INT_WDT: return "INTERRUPT_WATCHDOG";
+            case ESP_RST_TASK_WDT: return "TASK_WATCHDOG";
+            case ESP_RST_WDT: return "WATCHDOG";
+            case ESP_RST_DEEPSLEEP: return "DEEP_SLEEP";
+            case ESP_RST_BROWNOUT: return "BROWNOUT";
+            case ESP_RST_SDIO: return "SDIO";
+            // This SDK version has no code for USB resets, so a reset after flashing lands here
+            default: return "UNKNOWN (USB/flash reset?)";
+        }
+    }
+}
+
 SystemManager::SystemManager() {}
 
 SystemManager::Status SystemManager::getStatus() {
@@ -35,6 +55,7 @@ SystemManager::Status SystemManager::getStatus() {
     status.cpuFreqMHz = ESP.getCpuFreqMHz();
     status.chipModel = ESP.getChipModel();
     status.uptimeSeconds = (uint32_t)(esp_timer_get_time() / 1000000ULL);
+    status.resetReason = resetReasonName(esp_reset_reason());
 
     return status;
 }

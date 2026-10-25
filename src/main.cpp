@@ -7,6 +7,8 @@
 #include "Config.h"
 #include "HttpHandlers.h"
 #include "WebSocketHandler.h"
+#include "display/Hub75Display.h"
+#include "display/TestPattern.h"
 
 #define DEBUG true
 #define DEBUG_PRINT if(DEBUG) Serial
@@ -19,6 +21,7 @@ Config config = Config("/config.json");
 SystemManager systemManager = SystemManager();
 HttpHandlers httpHandlers = HttpHandlers(config, server, systemManager);
 WebSocketHandler wsHandler = WebSocketHandler(server, ws, systemManager);
+Hub75Display display;
 
 void setup() {
     DEBUG_PRINT.begin(115200);
@@ -51,6 +54,12 @@ void setup() {
     }
     
     config.load();
+
+    if (display.begin(config.getDisplayConfig())) {
+        drawTestPattern(display);
+        display.present();
+    }
+
     MDNS.begin(MDNSName);
 
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");

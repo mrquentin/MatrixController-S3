@@ -25,10 +25,45 @@ void Config::load() {
     }
 
     Debug = doc["debug"] | false;
+    Display = parseDisplayConfig(doc["display"]);
+}
+
+DisplayConfig Config::parseDisplayConfig(const JsonObjectConst json) {
+    const DisplayConfig defaults;
+    DisplayConfig display;
+
+    display.width = json["width"] | defaults.width;
+    if (display.width < 16 || display.width > 256) {
+        DEBUG_PRINTF("Invalid display width %u, using %u\n", display.width, defaults.width);
+        display.width = defaults.width;
+    }
+
+    display.height = json["height"] | defaults.height;
+    if (display.height != 16 && display.height != 32 && display.height != 64) {
+        DEBUG_PRINTF("Invalid display height %u (expected 16, 32 or 64), using %u\n", display.height, defaults.height);
+        display.height = defaults.height;
+    }
+
+    display.brightness = json["brightness"] | defaults.brightness;
+    if (display.brightness > MaxBrightness) {
+        DEBUG_PRINTF("Brightness %u above the %u limit, using %u\n", display.brightness, MaxBrightness, MaxBrightness);
+        display.brightness = MaxBrightness;
+    }
+    display.doubleBuffer = json["doubleBuffer"] | defaults.doubleBuffer;
+
+    return display;
 }
 
 std::string_view Config::getFilePath() const {
     return FilePath;
+}
+
+bool Config::isDebug() const {
+    return Debug;
+}
+
+const DisplayConfig& Config::getDisplayConfig() const {
+    return Display;
 }
 
 void Config::save(const uint8_t *data, const size_t len, const size_t index, const size_t total) {

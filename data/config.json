@@ -1,3 +1,9 @@
 {
-    "debug": true
+    "debug": true,
+    "display": {
+        "width": 128,
+        "height": 64,
+        "brightness": 32,
+        "doubleBuffer": true
+    }
 }

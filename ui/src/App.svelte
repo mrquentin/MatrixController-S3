@@ -1,7 +1,7 @@
 <script lang="ts">
     import {onMount} from "svelte";
     import {socketService} from "$lib/services/socket.svelte";
-    import {ENDPOINTS} from "$lib/config";
+    import {DEFAULT_DISPLAY_CONFIG, ENDPOINTS} from "$lib/config";
     import Overlay from "$lib/Overlay.svelte";
     import {busyStore} from "$lib/services/busy.svelte";
     import Status from "$lib/Status.svelte";
@@ -15,7 +15,7 @@
         loadConfig();
     })
 
-    let config = $state<ApiResponse<SystemConfig>>({ data: { debug: true }, error: null, loading: false })
+    let config = $state<ApiResponse<SystemConfig>>({ data: { debug: true, display: { ...DEFAULT_DISPLAY_CONFIG } }, error: null, loading: false })
 
     let activeTab = $state('home');
 

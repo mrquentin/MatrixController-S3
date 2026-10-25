@@ -21,7 +21,8 @@
             wifiMDNSName: '',
             wifiQuality: 0,
             wifiRssi: 0,
-            uptimeSeconds: 0
+            uptimeSeconds: 0,
+            resetReason: ''
         }});
 
     let uptime = $derived.by(() => {
@@ -165,6 +166,10 @@
                     <tr>
                         <th>Uptime</th>
                         <td>{uptime}</td>
+                    </tr>
+                    <tr>
+                        <th>Last Reset</th>
+                        <td>{status.data.resetReason}</td>
                     </tr>
                     </tbody>
                 </table>

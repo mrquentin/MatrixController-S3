@@ -23,6 +23,7 @@ public:
         uint32_t cpuFreqMHz;
         const char * chipModel;
         uint32_t uptimeSeconds;
+        const char * resetReason;
     };
     SystemManager();
     Status getStatus();

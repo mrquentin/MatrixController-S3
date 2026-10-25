@@ -15,8 +15,17 @@ export interface SystemStatus {
     wifiQuality: number;
     wifiRssi: number;
     uptimeSeconds: number;
+    resetReason: string;
+}
+
+export interface DisplayConfig {
+    width: number;
+    height: number;
+    brightness: number;
+    doubleBuffer: boolean;
 }
 
 export interface SystemConfig {
     debug: boolean;
+    display: DisplayConfig;
 }
