@@ -1,3 +1,6 @@
 .pio
 # WiFi is set up on the board (captive portal) and stored in NVS, never in the source
 src/wifi_creds.h
+
+# Written at build time by version.py
+include/FirmwareVersion.h

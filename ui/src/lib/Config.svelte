@@ -1,6 +1,6 @@
 <script lang="ts">
     import {apiRequest} from "$lib/api";
-    import type {SystemConfig} from "$lib/interfaces";
+    import type {SystemConfig, UpdateStatus} from "$lib/interfaces";
     import {busyStore} from "$lib/services/busy.svelte";
     import {themeStore, type ThemeMode} from "$lib/services/theme.svelte";
     import {DEFAULT_DISPLAY_CONFIG, DEFAULT_TIMEZONE, DISPLAY_HEIGHTS, ENDPOINTS, MAX_BRIGHTNESS, TIMEZONES} from "$lib/config";
@@ -11,6 +11,7 @@
     import ConfirmDialog from "$lib/ConfirmDialog.svelte";
     import WifiPage from "$lib/WifiPage.svelte";
     import OptionsPage from "$lib/OptionsPage.svelte";
+    import FirmwarePage from "$lib/FirmwarePage.svelte";
     import {onMount} from "svelte";
     import {fade, fly} from "svelte/transition";
     import {prefersReducedMotion} from "svelte/motion";
@@ -21,7 +22,7 @@
     // WiFi and restart: each change restarts the controller, so each is confirmed first
     let wifiSsid = $state<string | null>(null);
     // Pushed page shown instead of the settings list
-    let subpage = $state<'wifi' | 'timezone' | null>(null);
+    let subpage = $state<'wifi' | 'timezone' | 'firmware' | null>(null);
     let confirmForget = $state(false);
     let confirmRestart = $state(false);
     let restarting = $state<{ title: string, message: string } | null>(null);
@@ -32,8 +33,16 @@
         if (response.data) wifiSsid = response.data.ssid;
     }
 
+    let updateStatus = $state<UpdateStatus | null>(null);
+
+    async function loadUpdate() {
+        const response = await apiRequest<UpdateStatus>(ENDPOINTS.GET_UPDATE);
+        if (response.data) updateStatus = response.data;
+    }
+
     onMount(() => {
         loadWifi();
+        loadUpdate();
     });
 
     // Same pushed-view motion as the app pages
@@ -58,6 +67,10 @@
             actionError = response.error;
             return;
         }
+        expectRestart(notice, comesBack);
+    }
+
+    function expectRestart(notice: { title: string, message: string }, comesBack: boolean) {
         restarting = notice;
         if (comesBack) waitForRestart();
     }
@@ -70,7 +83,7 @@
                 const response = await fetch(ENDPOINTS.GET_SYSTEM_STATUS, { signal: AbortSignal.timeout(2000) });
                 if (response.ok) {
                     restarting = null;
-                    await Promise.all([reload(), loadWifi()]);
+                    await Promise.all([reload(), loadWifi(), loadUpdate()]);
                     return;
                 }
             } catch {
@@ -94,6 +107,15 @@
             title: 'WiFi forgotten',
             message: 'The controller is restarting in setup mode. Join the network shown on the panel to set up WiFi again.'
         }, false);
+    }
+
+    // The board restarts by itself once an update is in
+    function updateInstalled(version: string | null) {
+        show(null);
+        expectRestart({
+            title: version ? `Installing ${version}` : 'Update installed',
+            message: 'The controller is restarting into the new firmware. This page picks it up again once it is back.'
+        }, true);
     }
 
     function restart() {
@@ -167,6 +189,10 @@
 {#if subpage === 'wifi'}
     <div in:push={{ direction: 1 }}>
         <WifiPage current={wifiSsid ?? ''} onBack={() => show(null)} onJoin={joinWifi}/>
+    </div>
+{:else if subpage === 'firmware'}
+    <div in:push={{ direction: 1 }}>
+        <FirmwarePage status={updateStatus} reload={loadUpdate} onBack={() => show(null)} onInstalled={updateInstalled}/>
     </div>
 {:else if subpage === 'timezone'}
     <div in:push={{ direction: 1 }}>
@@ -287,6 +313,13 @@
             <section>
                 <h2 class="section-header">Device</h2>
                 <div class="grouped">
+                    <button type="button" class="grouped-row pressable-row disabled:opacity-40"
+                            disabled={!!restarting} onclick={() => show('firmware')}>
+                        <span class="shrink-0">Firmware</span>
+                        <span class="row-value truncate">{updateStatus?.version ?? '—'}</span>
+                        {#if updateStatus?.rolledBack}<Icon name="warning" class="size-4 shrink-0 text-warning"/>{/if}
+                        <Icon name="chevron" class="size-4 shrink-0 text-base-content/30" strokeWidth={2.5}/>
+                    </button>
                     <button type="button" class="grouped-row pressable-row text-primary disabled:opacity-40"
                             disabled={!!restarting} onclick={() => confirmRestart = true}>
                         Restart controller

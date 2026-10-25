@@ -1,0 +1,49 @@
+# Builds the firmware for every v* tag and publishes it as a GitHub release with firmware.bin
+# attached, which boards built with UPDATE_GITHUB_REPO (platformio.ini) can install from the web UI.
+#   git tag v1.0.0 && git push origin v1.0.0
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # version.py names the build after the tag with git describe, which needs the history
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the UI's dependencies
+        run: npm ci --prefix ui
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build
+        # The default environment; prebuild-ui.py builds the UI into include/ui first
+        run: pio run -e adafruit_matrixportal_esp32s3
+
+      - name: Check the version matches the tag
+        run: grep -q "\"${GITHUB_REF_NAME}\"" include/FirmwareVersion.h || { cat include/FirmwareVersion.h; exit 1; }
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: .pio/build/adafruit_matrixportal_esp32s3/firmware.bin
+          generate_release_notes: true

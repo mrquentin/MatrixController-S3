@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <WiFi.h>
@@ -19,6 +20,9 @@
 #include "display/Text.h"
 #include "net/CaptivePortal.h"
 #include "net/WifiStore.h"
+#include "ota/FirmwareUpdate.h"
+#include "ota/NetworkUpload.h"
+#include "ota/ReleaseUpdate.h"
 
 #define DEBUG true
 #define DEBUG_PRINT if(DEBUG) Serial
@@ -30,7 +34,10 @@ AsyncWebSocket ws("/ws");
 Config config = Config("/config.json");
 SystemManager systemManager = SystemManager();
 AppManager appManager = AppManager("/apps.json");
-HttpHandlers httpHandlers = HttpHandlers(config, server, systemManager, appManager);
+FirmwareUpdate firmwareUpdate;
+NetworkUpload networkUpload(firmwareUpdate);
+ReleaseUpdate releaseUpdate(firmwareUpdate);
+HttpHandlers httpHandlers = HttpHandlers(config, server, systemManager, appManager, firmwareUpdate, networkUpload, releaseUpdate);
 WebSocketHandler wsHandler = WebSocketHandler(server, ws, systemManager);
 Hub75Display display;
 CaptivePortal portal(server);
@@ -64,6 +71,9 @@ RTC_NOINIT_ATTR uint32_t setupRequest;
 // Restart this long after the credentials were saved, so the portal's answer reaches the phone
 constexpr uint32_t RestartDelayMs = 2500;
 uint32_t savedAtMs = 0;
+
+// A failed update is mentioned on the panel this long before the apps come back
+constexpr uint32_t UpdateFailedScreenMs = 5000;
 
 // Set from the web server task when a config is saved, applied in loop(): only the loop task may draw
 std::atomic<int16_t> pendingBrightness{-1};
@@ -99,6 +109,45 @@ namespace {
         const IPAddress addr = WiFi.localIP();
         snprintf(ip, sizeof(ip), "%u.%u.%u.%u", addr[0], addr[1], addr[2], addr[3]);
         drawLines("Matrix Controller", ip);
+    }
+
+    // Progress of a running update. Redrawn a few times a second at most: it's also called for
+    // every block PlatformIO sends, and drawing slows the flash writes down
+    void drawUpdateScreen() {
+        static uint32_t lastDrawMs = 0;
+        const uint32_t now = millis();
+        if (now - lastDrawMs < 150) return;
+        lastDrawMs = now;
+
+        const size_t size = firmwareUpdate.size();
+        const size_t written = firmwareUpdate.written();
+        char amount[16];
+        if (size > 0) {
+            snprintf(amount, sizeof(amount), "%u%%", static_cast<unsigned>(static_cast<uint64_t>(written) * 100 / size));
+        } else {
+            snprintf(amount, sizeof(amount), "%u KB", static_cast<unsigned>(written / 1024));
+        }
+
+        // Title, amount and a progress bar, then a reminder not to unplug it
+        constexpr int32_t BarHeight = 3;
+        const int32_t lineHeight = textHeight() + 4;
+        const int32_t width = display.width();
+        int32_t y = (static_cast<int32_t>(display.height()) - 3 * lineHeight - BarHeight) / 2;
+        display.clear();
+        drawCentered(y, firmwareUpdate.replacesFiles() ? "Updating files" : "Updating", Colors::Cyan);
+        y += lineHeight;
+        drawCentered(y, amount, Colors::White);
+        y += lineHeight;
+
+        const int32_t barWidth = width - 16;
+        display.fillRect(8, y, barWidth, BarHeight, DetailColor.scaled(60));
+        if (size > 0) {
+            const auto done = static_cast<int32_t>(static_cast<uint64_t>(barWidth) * std::min(written, size) / size);
+            display.fillRect(8, y, done, BarHeight, Colors::Cyan);
+        }
+        y += BarHeight + 4;
+        drawCentered(y, "Keep it powered", DetailColor);
+        display.present();
     }
 
     void drawSetupScreen() {
@@ -183,6 +232,10 @@ namespace {
 
         MDNS.begin(MDNSName);
 
+        // Uploads from PlatformIO block loop(), so they draw their own progress
+        networkUpload.onProgress(drawUpdateScreen);
+        networkUpload.begin();
+
         DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
         DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET,PUT,POST");
         DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "*");
@@ -261,9 +314,21 @@ void setup() {
 
 void loop() {
     const uint32_t now = millis();
+    // Ends the probation of freshly updated firmware once it has been running fine for a while;
+    // a crash or restart before that rolls back to the previous one
+    FirmwareUpdate::confirmWhenHealthy(now - setupDoneMs);
+
     if (setupMode) {
         loopSetupMode(now);
         return;
+    }
+
+    networkUpload.handle();
+
+    // An installed update boots after a restart. Restarting also remounts LittleFS after a file
+    // system update. Waiting a moment lets the web UI get its answer first
+    if (firmwareUpdate.state() == FirmwareUpdate::State::Installed) {
+        systemManager.scheduleRestart(firmwareUpdate.replacesFiles() ? "Files updated" : "Update installed");
     }
 
     // Asked for from the web UI (restart, WiFi changed or forgotten): say so on the panel until it happens
@@ -277,6 +342,32 @@ void loop() {
         systemManager.restartIfDue(now);
         delay(5);
         return;
+    }
+
+    // Uploads from the web UI and release downloads run on other tasks; the panel shows progress
+    // instead of the apps meanwhile
+    if (firmwareUpdate.state() == FirmwareUpdate::State::Running) {
+        drawUpdateScreen();
+        delay(5);
+        return;
+    }
+
+    // A failed firmware update changed nothing: it went to the spare slot, the running firmware
+    // simply carries on. A file system update writes over the files in place, so those may be gone
+    static uint32_t shownFailure = 0;
+    static uint32_t failureShownAtMs = 0;
+    if (firmwareUpdate.state() == FirmwareUpdate::State::Failed && firmwareUpdate.attempt() != shownFailure) {
+        shownFailure = firmwareUpdate.attempt();
+        failureShownAtMs = now | 1;
+        drawLines("Update failed", firmwareUpdate.replacesFiles() ? "Files incomplete" : "Nothing changed",
+                  "See the web page");
+    }
+    if (failureShownAtMs != 0) {
+        if (now - failureShownAtMs < UpdateFailedScreenMs) {
+            delay(5);
+            return;
+        }
+        failureShownAtMs = 0;
     }
 
     const int16_t brightness = pendingBrightness.exchange(-1);

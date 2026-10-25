@@ -17,13 +17,16 @@
 #include "SystemManager.h"
 #include "net/WifiScan.h"
 #include "net/WifiStore.h"
+#include "ota/UpdatePassword.h"
 
 #define DEBUG true  //set to true for debug output, false for no debug output
 #define DEBUG_PRINT if(DEBUG)Serial
 #define DEBUG_PRINTF if(DEBUG)printf
 
-HttpHandlers::HttpHandlers(Config& config, AsyncWebServer &server, SystemManager &systemManager, AppManager &appManager) :
-    _config(config), _server(server), _systemManager(systemManager), _appManager(appManager) {}
+HttpHandlers::HttpHandlers(Config& config, AsyncWebServer &server, SystemManager &systemManager, AppManager &appManager,
+                           FirmwareUpdate& firmwareUpdate, NetworkUpload& networkUpload, ReleaseUpdate& releaseUpdate) :
+    _config(config), _server(server), _systemManager(systemManager), _appManager(appManager),
+    _firmwareUpdate(firmwareUpdate), _networkUpload(networkUpload), _releaseUpdate(releaseUpdate) {}
 
 void HttpHandlers::setup() {
     addHandlerRoot();
@@ -32,6 +35,7 @@ void HttpHandlers::setup() {
     addHandlerApiApps();
     addHandlerApiWifi();
     addHandlerApiRestart();
+    addHandlerApiUpdate();
 
     _server.onNotFound([](AsyncWebServerRequest *request) {
         if (request->method() == HTTP_OPTIONS) {
@@ -92,6 +96,7 @@ void HttpHandlers::addHandlerApiStatus() {
         doc["wifiRssi"] = status.wifiRssi;
         doc["uptimeSeconds"] = status.uptimeSeconds;
         doc["resetReason"] = status.resetReason;
+        doc["firmwareVersion"] = FirmwareUpdate::version();
 
         String response;
         serializeJson(doc, response);
@@ -219,5 +224,182 @@ void HttpHandlers::addHandlerApiRestart() {
         DEBUG_PRINTF("Request to %s\n", request->url().c_str());
         request->send(200, "application/json", "{\"result\":\"success\"}");
         _systemManager.scheduleRestart("");
+    });
+}
+
+namespace {
+    // Requests that update send the update password in this header
+    constexpr const char* PasswordHeader = "X-Update-Password";
+
+    /// What the body handler of an upload decided, for the request handler that answers it
+    struct UploadState {
+        int status;
+        // The update this upload feeds, 0 if refused
+        uint32_t attempt;
+    };
+
+    void sendError(AsyncWebServerRequest *request, const int status, const char* details) {
+        JsonDocument doc;
+        doc["result"] = "error";
+        doc["details"] = details;
+
+        String response;
+        serializeJson(doc, response);
+        request->send(status, "application/json", response);
+    }
+
+    /// HTTP status for a password check: 200 when it's right
+    int passwordStatus(const UpdatePassword::Result result) {
+        switch (result) {
+            case UpdatePassword::Result::Ok: return 200;
+            case UpdatePassword::Result::NotSet: return 409;
+            case UpdatePassword::Result::LockedOut: return 429;
+            default: return 401;
+        }
+    }
+
+    const char* passwordError(const int status) {
+        switch (status) {
+            case 409: return "Set an update password first";
+            case 429: return "Too many wrong passwords, try again in a minute";
+            default: return "Wrong update password";
+        }
+    }
+
+    int authorizeUpdate(AsyncWebServerRequest *request) {
+        return passwordStatus(UpdatePassword::check(request->header(PasswordHeader).c_str()));
+    }
+}
+
+void HttpHandlers::addHandlerApiUpdate() {
+    // As with WiFi, a plain "/api/system/update" route also matches the paths below it, so these come first
+
+    // Checks a password without changing anything, so the UI can find out before a long upload
+    _server.on("/api/system/update/verify", HTTP_POST, [](AsyncWebServerRequest *request) {
+        const int status = authorizeUpdate(request);
+        if (status != 200) {
+            sendError(request, status, passwordError(status));
+            return;
+        }
+        request->send(200, "application/json", "{\"result\":\"success\"}");
+    });
+
+    // Body: {"current": "...", "password": "..."}. current is only needed when one is set already
+    _server.addHandler(new AsyncCallbackJsonWebHandler("/api/system/update/password", [&](AsyncWebServerRequest *request, JsonVariant &json) {
+        DEBUG_PRINTF("Request to %s\n", request->url().c_str());
+        const std::string password = json["password"] | "";
+        if (!UpdatePassword::isValid(password)) {
+            sendError(request, 400, "The password must be 8 to 64 characters");
+            return;
+        }
+        if (UpdatePassword::isSet()) {
+            const int status = passwordStatus(UpdatePassword::check(json["current"] | ""));
+            if (status != 200) {
+                sendError(request, status, status == 401 ? "Wrong current password" : passwordError(status));
+                return;
+            }
+        }
+
+        UpdatePassword::set(password);
+        _networkUpload.passwordChanged();
+        request->send(200, "application/json", "{\"result\":\"success\"}");
+    }));
+
+    // Looks up the latest GitHub release in the background; GET /api/system/update tells the result
+    _server.on("/api/system/update/release/check", HTTP_POST, [&](AsyncWebServerRequest *request) {
+        if (!ReleaseUpdate::available()) {
+            sendError(request, 404, "No release repository is set up in this firmware");
+            return;
+        }
+        if (!_releaseUpdate.check()) {
+            sendError(request, 409, "A check or install is already underway");
+            return;
+        }
+        request->send(202, "application/json", "{\"result\":\"success\"}");
+    });
+
+    // Downloads and installs the release the last check found, in the background
+    _server.on("/api/system/update/release/install", HTTP_POST, [&](AsyncWebServerRequest *request) {
+        DEBUG_PRINTF("Request to %s\n", request->url().c_str());
+        const int status = authorizeUpdate(request);
+        if (status != 200) {
+            sendError(request, status, passwordError(status));
+            return;
+        }
+        if (!ReleaseUpdate::available()) {
+            sendError(request, 404, "No release repository is set up in this firmware");
+            return;
+        }
+        if (!_releaseUpdate.install()) {
+            sendError(request, 409, "Check for a release first, or wait for the one underway");
+            return;
+        }
+        request->send(202, "application/json", "{\"result\":\"success\"}");
+    });
+
+    _server.on("/api/system/update", HTTP_GET, [&](AsyncWebServerRequest *request) {
+        JsonDocument doc;
+        _firmwareUpdate.describe(doc.to<JsonObject>());
+        doc["passwordSet"] = UpdatePassword::isSet();
+
+        const JsonObject network = doc["networkUpload"].to<JsonObject>();
+        network["listening"] = _networkUpload.listening();
+        network["port"] = NetworkUpload::Port;
+        network["restartNeeded"] = _networkUpload.restartNeeded();
+
+        if (ReleaseUpdate::available()) {
+            _releaseUpdate.describe(doc["release"].to<JsonObject>());
+        } else {
+            doc["release"] = nullptr;
+        }
+
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
+
+    // Body: firmware.bin as application/octet-stream, written to flash as it arrives. The board
+    // restarts into it once it's in (see loop())
+    _server.on("/api/system/update", HTTP_POST, [&](AsyncWebServerRequest *request) {
+        // Runs once the whole body is in
+        const auto* upload = static_cast<const UploadState*>(request->_tempObject);
+        const int status = upload ? upload->status : 400;
+        if (status == 400) {
+            sendError(request, 400, "No firmware received");
+        } else if (status != 200) {
+            sendError(request, status, status == 503 ? "Another update is running" : passwordError(status));
+        } else if (_firmwareUpdate.attempt() == upload->attempt
+                   && _firmwareUpdate.state() == FirmwareUpdate::State::Installed) {
+            request->send(200, "application/json", "{\"result\":\"success\"}");
+        } else {
+            sendError(request, 422, _firmwareUpdate.attempt() == upload->attempt
+                && _firmwareUpdate.state() == FirmwareUpdate::State::Failed ? _firmwareUpdate.error() : "Update failed");
+        }
+    }, nullptr, [&](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (index == 0) {
+            DEBUG_PRINTF("Request to %s, %u bytes\n", request->url().c_str(), static_cast<unsigned>(total));
+            UploadState upload{authorizeUpdate(request), 0};
+            if (upload.status == 200) {
+                // Reasons it fails straight away (e.g. too large) are in the update's own state
+                upload.attempt = _firmwareUpdate.begin(UpdateSource::Upload, total);
+                if (upload.attempt == 0) upload.status = 503;
+            }
+            // The request frees it with free()
+            request->_tempObject = malloc(sizeof(UploadState));
+            if (request->_tempObject) *static_cast<UploadState*>(request->_tempObject) = upload;
+            if (upload.attempt != 0) {
+                // A dropped connection leaves the image incomplete
+                request->onDisconnect([this, attempt = upload.attempt] {
+                    _firmwareUpdate.cancel(attempt, "Upload interrupted");
+                });
+            }
+        }
+
+        // Refused uploads are still received, just not written
+        const auto* upload = static_cast<const UploadState*>(request->_tempObject);
+        if (!upload || upload->attempt == 0) return;
+        if (_firmwareUpdate.write(upload->attempt, data, len) && index + len == total) {
+            _firmwareUpdate.finish(upload->attempt);
+        }
     });
 }

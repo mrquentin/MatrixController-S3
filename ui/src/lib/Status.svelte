@@ -115,6 +115,7 @@
                 <h2 class="section-header">System</h2>
                 <div class="grouped">
                     <div class="grouped-row"><span>Chip</span><span class="row-value">{data.chipModel}</span></div>
+                    <div class="grouped-row"><span>Firmware</span><span class="row-value select-text">{data.firmwareVersion ?? "—"}</span></div>
                     <div class="grouped-row"><span>Processor</span><span class="row-value">{data.cpuFreqMHz} MHz</span></div>
                     <div class="grouped-row"><span>Uptime</span><span class="row-value">{uptime}</span></div>
                     <div class="grouped-row">

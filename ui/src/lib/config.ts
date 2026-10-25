@@ -13,11 +13,24 @@ export const ENDPOINTS = {
     GET_WIFI_SCAN:      `${BASE_URL}/api/system/wifi/scan`,
     POST_WIFI_FORGET:   `${BASE_URL}/api/system/wifi/forget`,
     POST_RESTART:       `${BASE_URL}/api/system/restart`,
+    GET_UPDATE:         `${BASE_URL}/api/system/update`,
+    POST_UPDATE:        `${BASE_URL}/api/system/update`,
+    POST_UPDATE_VERIFY: `${BASE_URL}/api/system/update/verify`,
+    POST_UPDATE_PASSWORD: `${BASE_URL}/api/system/update/password`,
+    POST_RELEASE_CHECK: `${BASE_URL}/api/system/update/release/check`,
+    POST_RELEASE_INSTALL: `${BASE_URL}/api/system/update/release/install`,
     GET_APPS:          `${BASE_URL}/api/apps`,
     POST_APP_ACTIVE:    `${BASE_URL}/api/apps/active`,
     POST_APP_CONFIG:    `${BASE_URL}/api/apps/config`,
     WEB_SOCKET:         `${BASE_URL}/ws`
 }
+
+// Requests that update the firmware carry the update password in this header
+export const UPDATE_PASSWORD_HEADER = 'X-Update-Password';
+
+// Same limits as UpdatePassword::isValid on the board
+export const UPDATE_PASSWORD_MIN = 8;
+export const UPDATE_PASSWORD_MAX = 64;
 
 // Mirrors the firmware defaults in include/display/DisplayConfig.h
 export const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
