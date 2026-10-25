@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    // Tests run in Node: they can read the firmware's sources to compare constants
+    "types": ["node", "vite/client"]
+  },
+  "include": ["tests/**/*.ts", "src/**/*.ts"]
+}

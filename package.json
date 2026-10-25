@@ -1,0 +1,14 @@
+{
+  "name": "matrix-controller",
+  "private": true,
+  "description": "Release tooling only: the web UI is its own project in ui/, the firmware is built with PlatformIO",
+  "scripts": {
+    "release": "semantic-release"
+  },
+  "devDependencies": {
+    "@semantic-release/exec": "7.1.0",
+    "@semantic-release/github": "12.0.10",
+    "conventional-changelog-conventionalcommits": "10.4.1",
+    "semantic-release": "25.0.9"
+  }
+}
