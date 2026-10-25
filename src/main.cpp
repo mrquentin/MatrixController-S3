@@ -11,6 +11,7 @@
 #include "WebSocketHandler.h"
 #include "apps/AppManager.h"
 #include "apps/ClockApp.h"
+#include "apps/F1App.h"
 #include "apps/TextApp.h"
 #include "apps/WeatherApp.h"
 #include "display/Hub75Display.h"
@@ -34,6 +35,7 @@ Hub75Display display;
 TextApp textApp;
 ClockApp clockApp;
 WeatherApp weatherApp;
+F1App f1App;
 
 // After setup() the test pattern stays up, then a screen with the IP address, then the apps start
 constexpr uint32_t TestPatternDurationMs = 3000;
@@ -109,6 +111,7 @@ void setup() {
 
     appManager.add(clockApp);
     appManager.add(weatherApp);
+    appManager.add(f1App);
     appManager.add(textApp);
     appManager.begin();
 

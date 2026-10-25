@@ -19,6 +19,7 @@
         clock: { icon: 'clock', tint: 'bg-[#ff9500]' },
         text: { icon: 'text', tint: 'bg-[#007aff]' },
         weather: { icon: 'cloud', tint: 'bg-[#32ade6]' },
+        f1: { icon: 'flag', tint: 'bg-[#ff3b30]' },
     };
     const FALLBACK_STYLE = { icon: 'overview' as IconName, tint: 'bg-[#8e8e93]' };
 
