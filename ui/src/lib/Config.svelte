@@ -78,7 +78,7 @@
                     Double buffering
                 </label>
 
-                <p class="text-xs opacity-60 mb-5">Matrix changes take effect after a reboot.</p>
+                <p class="text-xs opacity-60 mb-5">Brightness applies on save. Size and double buffering take effect after a reboot.</p>
 
 
                 <button class="btn btn-md btn-soft btn-info w-full" onclick={save}>

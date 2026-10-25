@@ -66,6 +66,10 @@ const DisplayConfig& Config::getDisplayConfig() const {
     return Display;
 }
 
+void Config::onSaved(SavedCallback callback) {
+    OnSaved = std::move(callback);
+}
+
 void Config::save(const uint8_t *data, const size_t len, const size_t index, const size_t total) {
     if (File file = LittleFS.open(FilePath.data(), (index == 0) ? FILE_WRITE : FILE_APPEND)) {
         file.write(data, len);
@@ -82,5 +86,6 @@ void Config::save(const uint8_t *data, const size_t len, const size_t index, con
 
         DEBUG_PRINT.println("Reloading config... ");
         load();
+        if (OnSaved) OnSaved(*this);
     }
 }

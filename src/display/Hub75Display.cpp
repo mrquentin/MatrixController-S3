@@ -8,10 +8,13 @@
 #define DEBUG_PRINTF if(DEBUG)printf
 
 namespace {
-    // Adafruit MatrixPortal S3 HUB75 connector wiring
+    // Adafruit MatrixPortal S3 HUB75 connector wiring. The board labels its color pins
+    // R1/G1/B1 = 42/41/40 and R2/G2/B2 = 38/39/37, but our panel takes its color inputs in a
+    // different order (sending red lit blue, green lit red, blue lit green), so the color pins
+    // are reassigned here to keep Color values true RGB.
     constexpr HUB75_I2S_CFG::i2s_pins MatrixPortalS3Pins = {
-        42, 41, 40,          // R1, G1, B1
-        38, 39, 37,          // R2, G2, B2
+        41, 40, 42,          // R1, G1, B1
+        39, 37, 38,          // R2, G2, B2
         45, 36, 48, 35, 21,  // A, B, C, D, E
         47, 14, 2            // LAT, OE, CLK
     };
