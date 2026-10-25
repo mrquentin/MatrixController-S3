@@ -16,6 +16,8 @@ class HttpHandlers {
         void addHandlerApiStatus();
         void addHandlerApiConfig();
         void addHandlerApiApps();
+        void addHandlerApiWifi();
+        void addHandlerApiRestart();
 
         AsyncWebServer& _server;
         SystemManager& _systemManager;

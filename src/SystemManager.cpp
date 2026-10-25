@@ -59,3 +59,17 @@ SystemManager::Status SystemManager::getStatus() {
 
     return status;
 }
+
+void SystemManager::scheduleRestart(const std::string& note, const uint32_t delayMs) {
+    // Only the first request counts: the note must not change while loop() is showing it
+    if (restartPending()) return;
+    _restartNote = note;
+    // 0 means "none scheduled", so never store it as a deadline
+    _restartAtMs = (millis() + delayMs) | 1;
+    DEBUG_PRINTF("Restart scheduled in %u ms\n", static_cast<unsigned>(delayMs));
+}
+
+void SystemManager::restartIfDue(const uint32_t now) const {
+    const uint32_t restartAt = _restartAtMs;
+    if (restartAt != 0 && static_cast<int32_t>(now - restartAt) >= 0) ESP.restart();
+}

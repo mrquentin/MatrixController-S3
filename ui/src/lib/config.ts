@@ -8,7 +8,12 @@ export const ENDPOINTS = {
     GET_SYSTEM_STATUS:  `${BASE_URL}/api/system/status`,
     GET_SYSTEM_CONFIG: `${BASE_URL}/api/system/config`,
     POST_SYSTEM_CONFIG: `${BASE_URL}/api/system/config`,
-    GET_APPS:           `${BASE_URL}/api/apps`,
+    GET_WIFI:           `${BASE_URL}/api/system/wifi`,
+    POST_WIFI:          `${BASE_URL}/api/system/wifi`,
+    GET_WIFI_SCAN:      `${BASE_URL}/api/system/wifi/scan`,
+    POST_WIFI_FORGET:   `${BASE_URL}/api/system/wifi/forget`,
+    POST_RESTART:       `${BASE_URL}/api/system/restart`,
+    GET_APPS:          `${BASE_URL}/api/apps`,
     POST_APP_ACTIVE:    `${BASE_URL}/api/apps/active`,
     POST_APP_CONFIG:    `${BASE_URL}/api/apps/config`,
     WEB_SOCKET:         `${BASE_URL}/ws`

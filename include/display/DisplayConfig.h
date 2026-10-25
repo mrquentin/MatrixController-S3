@@ -16,6 +16,9 @@ struct DisplayConfig {
     uint16_t height = 64;
     uint8_t brightness = 128;
     bool doubleBuffer = true;
+    /// Trades colour for speed: 2 bits per channel and a doubled clock refresh the panel fast enough
+    /// for phone cameras, which otherwise see stripes. Used for the WiFi setup QR code, never saved.
+    bool fastRefresh = false;
 };
 
 #endif

@@ -23,6 +23,12 @@ namespace {
     // radiate enough noise to cripple WiFi on the MatrixPortal, and 8 MHz doesn't need them.
     constexpr gpio_drive_cap_t Hub75DriveStrength = GPIO_DRIVE_CAP_0;
 
+    // The driver's default of 60 Hz looks steady to the eye, but phone cameras read the image line
+    // by line and see diagonal stripes (the setup QR code can't be scanned). The driver gets there by
+    // shortening the darkest colour bits, not by raising the clock, so WiFi isn't affected.
+    // The setting is a uint8_t, so 255 is the most that can be asked.
+    constexpr uint8_t MinRefreshRateHz = 240;
+
     void reduceDriveStrength(const HUB75_I2S_CFG::i2s_pins& pins) {
         const int8_t all[] = {pins.r1, pins.g1, pins.b1, pins.r2, pins.g2, pins.b2,
                               pins.a, pins.b, pins.c, pins.d, pins.e, pins.lat, pins.oe, pins.clk};
@@ -43,6 +49,13 @@ bool Hub75Display::begin(const DisplayConfig& config) {
 
     HUB75_I2S_CFG cfg(config.width, config.height, 1, MatrixPortalS3Pins);
     cfg.double_buff = config.doubleBuffer;
+    cfg.min_refresh_rate = MinRefreshRateHz;
+    if (config.fastRefresh) {
+        // 2 bits is the driver's minimum. Each row then takes 3 time slots instead of 255, and the
+        // faster clock halves them again; at reduced drive strength WiFi still copes at 16 MHz
+        cfg.setPixelColorDepthBits(2);
+        cfg.i2sspeed = HUB75_I2S_CFG::HZ_15M;
+    }
 
     _panel = std::make_unique<MatrixPanel_I2S_DMA>(cfg);
     if (!_panel->begin()) {
@@ -57,8 +70,9 @@ bool Hub75Display::begin(const DisplayConfig& config) {
     clear();
     present();
 
-    DEBUG_PRINTF("HUB75 ready: %ux%u, brightness %u, double buffer: %d\n",
-                 config.width, config.height, _config.brightness, config.doubleBuffer);
+    DEBUG_PRINTF("HUB75 ready: %ux%u, brightness %u, double buffer: %d, refresh %d Hz\n",
+                 config.width, config.height, _config.brightness, config.doubleBuffer,
+                 _panel->calculated_refresh_rate);
     return true;
 }
 

@@ -21,6 +21,8 @@ public:
     Hub75Display& operator=(const Hub75Display&) = delete;
 
     /// Allocates the DMA buffers and starts refreshing the panel. Returns false if allocation fails.
+    /// Call only once: the driver doesn't release its DMA channel when a panel is destroyed, so a
+    /// second panel can't connect while the first one's channel keeps reading freed memory.
     bool begin(const DisplayConfig& config);
     [[nodiscard]] bool isReady() const;
 

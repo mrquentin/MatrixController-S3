@@ -32,6 +32,13 @@ export interface SystemConfig {
     timezone: string;
 }
 
+export interface WifiNetwork {
+    ssid: string;
+    // 0-100, from the signal strength
+    quality: number;
+    secure: boolean;
+}
+
 // One setting of an app, as described by the firmware's ConfigSchema
 export type AppField = { key: string; label: string } & (
     | { type: 'text'; maxLength: number }
