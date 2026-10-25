@@ -1,0 +1,97 @@
+# Checks every pull request: the web UI (types, tests, build), the firmware's unit tests and the
+# firmware build. The release workflow runs it again on main before publishing.
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ui:
+    name: UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - name: Type check
+        run: npm run check
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  firmware-tests:
+    name: Firmware tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-native-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio
+      - name: Test
+        run: pio test -e native
+
+  firmware:
+    name: Firmware build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # version.py names the build with git describe, which needs the tags
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-esp32-${{ hashFiles('platformio.ini') }}
+      # prebuild-ui.py builds the UI into include/ui before the firmware
+      - run: npm ci --prefix ui
+      - run: pip install platformio
+      - name: Build
+        run: pio run -e adafruit_matrixportal_esp32s3
+      # Can be installed from the board's Firmware page to try a pull request out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: .pio/build/adafruit_matrixportal_esp32s3/firmware.bin
+          retention-days: 14
+
+  pr-title:
+    name: Conventional PR title
+    # Pull requests are squash-merged with their title as the commit message, which decides the
+    # next version: "fix: ..." a patch, "feat: ..." a minor, "feat!: ..." or a BREAKING CHANGE a major
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

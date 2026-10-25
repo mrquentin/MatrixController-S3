@@ -4,3 +4,7 @@ src/wifi_creds.h
 
 # Written at build time by version.py
 include/FirmwareVersion.h
+
+# Release tooling (package.json) and its output
+node_modules/
+dist/

@@ -1,49 +1,62 @@
-# Builds the firmware for every v* tag and publishes it as a GitHub release with firmware.bin
-# attached, which boards built with UPDATE_GITHUB_REPO (platformio.ini) can install from the web UI.
-#   git tag v1.0.0 && git push origin v1.0.0
+# Every push to main (a merged pull request) is checked again, then semantic-release reads the
+# conventional commits since the last release to decide the next version. If there's one (any
+# feat or fix), it builds the firmware with that version, tags it and publishes a GitHub release
+# with firmware.bin, which boards install from their Firmware page. Commits like docs or chore
+# release nothing.
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+
+# One release at a time, never cancelled halfway through publishing
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # version.py names the build after the tag with git describe, which needs the history
-          fetch-depth: 0
+  ci:
+    uses: ./.github/workflows/ci.yml
 
-      - uses: actions/setup-node@v4
+  release:
+    name: Release
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      # Tags and releases
+      contents: write
+      # Comments on the pull requests and issues a release includes
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # semantic-release reads the commits and tags since the last release
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: ui/package-lock.json
-
+          cache-dependency-path: |
+            package-lock.json
+            ui/package-lock.json
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - name: Install the UI's dependencies
-        run: npm ci --prefix ui
-
-      - name: Install PlatformIO
-        run: pip install platformio
-
-      - name: Build
-        # The default environment; prebuild-ui.py builds the UI into include/ui first
-        run: pio run -e adafruit_matrixportal_esp32s3
-
-      - name: Check the version matches the tag
-        run: grep -q "\"${GITHUB_REF_NAME}\"" include/FirmwareVersion.h || { cat include/FirmwareVersion.h; exit 1; }
-
-      - name: Publish the release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/cache@v4
         with:
-          files: .pio/build/adafruit_matrixportal_esp32s3/firmware.bin
-          generate_release_notes: true
+          path: ~/.platformio
+          key: platformio-esp32-${{ hashFiles('platformio.ini') }}
+      - name: Install the release tools and the UI's dependencies
+        run: |
+          npm ci
+          npm ci --prefix ui
+      - run: pip install platformio
+      - name: Release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

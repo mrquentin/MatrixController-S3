@@ -5,7 +5,7 @@ from datetime import datetime
 Import("env")
 
 # Writes include/FirmwareVersion.h with the version reported by the board, so an update can be
-# checked to have taken. Tagged release builds show the tag ("v1.2.0"), others the commit
+# checked to have taken. Release builds show their tag ("v1.2.0"), others the commit
 # ("v1.2.0-3-ga25165f", or "a25165f" before the first tag). Builds with uncommitted changes add
 # the build time, since they'd all look the same otherwise.
 
@@ -16,7 +16,8 @@ def describe():
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
 
-version = describe()
+# Release builds are told the version semantic-release picked, before its tag exists
+version = os.environ.get("FIRMWARE_VERSION") or describe()
 if version.endswith("-dirty"):
     version = version[:-len("-dirty")] + "+" + datetime.now().strftime("%Y%m%d-%H%M")
 
