@@ -324,6 +324,8 @@ void loop() {
     }
 
     networkUpload.handle();
+    // Looks for new GitHub releases in the background now and then, for the web UI to offer
+    releaseUpdate.checkWhenDue(now);
 
     // An installed update boots after a restart. Restarting also remounts LittleFS after a file
     // system update. Waiting a moment lets the web UI get its answer first

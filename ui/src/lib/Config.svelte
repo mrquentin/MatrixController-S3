@@ -317,6 +317,9 @@
                             disabled={!!restarting} onclick={() => show('firmware')}>
                         <span class="shrink-0">Firmware</span>
                         <span class="row-value truncate">{updateStatus?.version ?? '—'}</span>
+                        {#if updateStatus?.release?.updateAvailable}
+                            <span class="badge badge-primary badge-sm shrink-0">Update available</span>
+                        {/if}
                         {#if updateStatus?.rolledBack}<Icon name="warning" class="size-4 shrink-0 text-warning"/>{/if}
                         <Icon name="chevron" class="size-4 shrink-0 text-base-content/30" strokeWidth={2.5}/>
                     </button>

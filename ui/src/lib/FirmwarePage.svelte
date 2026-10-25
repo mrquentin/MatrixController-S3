@@ -70,6 +70,13 @@
         return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${Math.round(bytes / 1024)} KB`;
     }
 
+    function formatAgo(seconds: number): string {
+        if (seconds < 60) return 'Just now';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
+        return `${Math.floor(seconds / 86400)} d ago`;
+    }
+
     function formatDate(iso: string | undefined): string {
         if (!iso) return '';
         const date = new Date(iso);
@@ -135,6 +142,17 @@
         reportedInstall = true;
         onInstalled(null);
     }
+
+    // Opening the page looks for a new release, unless the board checked a moment ago
+    const RECHECK_AFTER_SECONDS = 10 * 60;
+    let checkedOnOpen = false;
+    $effect(() => {
+        const release = status?.release;
+        if (checkedOnOpen || !release) return;
+        checkedOnOpen = true;
+        const stale = release.checkedSecondsAgo === undefined || release.checkedSecondsAgo > RECHECK_AFTER_SECONDS;
+        if (stale && !release.busy) checkRelease();
+    });
 
     async function checkRelease() {
         installError = null;
@@ -245,6 +263,56 @@
         {/if}
     </section>
 
+    {#if status.release}
+        {@const release = status.release}
+        <section>
+            <h2 class="section-header">Updates</h2>
+            <div class="grouped">
+                <div class="grouped-row">
+                    <span class="shrink-0">Latest</span>
+                    <span class="row-value truncate">
+                        {release.latest ? `${release.latest}${release.publishedAt ? `, ${formatDate(release.publishedAt)}` : ''}` : '—'}
+                    </span>
+                    {#if release.updateAvailable}
+                        <span class="badge badge-primary badge-sm shrink-0">New</span>
+                    {/if}
+                </div>
+                <div class="grouped-row">
+                    <span class="shrink-0">Checked</span>
+                    <span class="row-value">
+                        {releaseBusy && release.job === 'check' ? 'Checking...' : release.checkedSecondsAgo !== undefined ? formatAgo(release.checkedSecondsAgo) : 'Not yet'}
+                    </span>
+                </div>
+                <button type="button" class="grouped-row pressable-row text-primary disabled:opacity-40"
+                        disabled={releaseBusy || installing} onclick={checkRelease}>
+                    Check now
+                </button>
+                {#if release.updateAvailable && status.passwordSet}
+                    <label class="grouped-row cursor-text">
+                        <span class="w-24 shrink-0">Password</span>
+                        <input bind:value={password} type="password" autocomplete="current-password"
+                               class="min-w-0 flex-1 bg-transparent outline-none" placeholder="Update password"/>
+                    </label>
+                    <button type="button" class="grouped-row pressable-row font-semibold text-primary disabled:opacity-40"
+                            disabled={!canInstall || releaseBusy} onclick={() => confirmRelease = true}>
+                        Install {release.latest}
+                    </button>
+                {/if}
+            </div>
+            {#if release.error}
+                <p class="section-footer text-error!">{release.error}</p>
+            {:else if release.updateAvailable && !status.passwordSet}
+                <p class="section-footer">{release.latest} is available. Set an update password above to install it.</p>
+            {:else if release.updateAvailable}
+                <p class="section-footer">Downloads the release from GitHub and restarts into it. Your settings and WiFi are kept.</p>
+            {:else if release.latest}
+                <p class="section-footer">Up to date. The controller also checks by itself twice a day.</p>
+            {:else}
+                <p class="section-footer">Looks for new releases of {release.repo} on GitHub, by itself twice a day too.</p>
+            {/if}
+        </section>
+    {/if}
+
     {#if status.passwordSet}
         <section>
             <h2 class="section-header">Install from a file</h2>
@@ -284,43 +352,6 @@
             Install file
         </button>
 
-        {#if status.release}
-            {@const release = status.release}
-            <section>
-                <h2 class="section-header">Latest release</h2>
-                <div class="grouped">
-                    <div class="grouped-row">
-                        <span class="shrink-0">Repository</span>
-                        <span class="row-value truncate">{release.repo}</span>
-                    </div>
-                    {#if release.latest}
-                        <div class="grouped-row">
-                            <span class="shrink-0">Latest</span>
-                            <span class="row-value truncate">
-                                {release.latest}{release.publishedAt ? `, ${formatDate(release.publishedAt)}` : ''}
-                            </span>
-                        </div>
-                    {/if}
-                    <button type="button" class="grouped-row pressable-row text-primary disabled:opacity-40"
-                            disabled={releaseBusy || installing} onclick={checkRelease}>
-                        <span>{releaseBusy && release.job === 'check' ? 'Checking...' : 'Check for updates'}</span>
-                    </button>
-                    {#if release.latest}
-                        <button type="button" class="grouped-row pressable-row text-primary disabled:opacity-40"
-                                disabled={!canInstall || releaseBusy} onclick={() => confirmRelease = true}>
-                            {release.updateAvailable ? `Install ${release.latest}` : `Reinstall ${release.latest}`}
-                        </button>
-                    {/if}
-                </div>
-                {#if release.error}
-                    <p class="section-footer text-error!">{release.error}</p>
-                {:else if release.latest && !release.updateAvailable}
-                    <p class="section-footer">This is the version installed.</p>
-                {:else}
-                    <p class="section-footer">Installs the firmware.bin attached to the latest release on GitHub, using the password above.</p>
-                {/if}
-            </section>
-        {/if}
     {/if}
 
     {#if installError || (status.state === 'failed' && status.error)}
