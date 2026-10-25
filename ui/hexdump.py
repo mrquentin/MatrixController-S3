@@ -1,9 +1,10 @@
 import os
 import hashlib
 
+# Run from ui/ (npm run dump). os.path.join, so it works on Linux (CI) as well as Windows
 paths = {
-    "src": ".\\dist", #os.path.join("ui", "dist"),
-    "dest": "..\\include\\ui" #os.path.join("include", "ui")
+    "src": "dist",
+    "dest": os.path.join("..", "include", "ui")
 }
 
 print(f"src: {paths['src']}")
