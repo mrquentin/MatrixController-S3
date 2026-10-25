@@ -33,6 +33,10 @@ updates:
     groups:
       release-tools:
         update-types: [minor, patch]
+    ignore:
+      # Version 10 needs changelog writer 9, newer than the one semantic-release bundles (8)
+      - dependency-name: conventional-changelog-conventionalcommits
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
