@@ -37,7 +37,8 @@ export const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
     width: 128,
     height: 64,
     brightness: 128,
-    doubleBuffer: true
+    doubleBuffer: true,
+    orientation: 'auto'
 }
 
 // Mirrors MaxBrightness in include/display/DisplayConfig.h

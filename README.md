@@ -20,6 +20,10 @@ http://matrixcontroller.local. Firmware updates can be installed from its Settin
 either a `firmware.bin` or the latest GitHub release; they need the update password set on that page.
 The controller looks for new releases by itself twice a day and flags them there.
 
+The picture follows the board's accelerometer, so the panel can hang either way up (landscape only).
+Settings → Panel → Orientation can fix it upright or flipped instead; Status → Orientation shows the
+sensor's readings.
+
 ## Tests
 
 ```sh

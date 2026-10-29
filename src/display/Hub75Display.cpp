@@ -90,7 +90,11 @@ uint16_t Hub75Display::height() const {
 
 void Hub75Display::setPixel(const int16_t x, const int16_t y, const Color color) {
     if (!_panel || x < 0 || y < 0 || x >= _config.width || y >= _config.height) return;
-    _panel->drawPixelRGB888(x, y, color.r, color.g, color.b);
+    if (_orientation == Orientation::UpsideDown) {
+        _panel->drawPixelRGB888(_config.width - 1 - x, _config.height - 1 - y, color.r, color.g, color.b);
+    } else {
+        _panel->drawPixelRGB888(x, y, color.r, color.g, color.b);
+    }
 }
 
 void Hub75Display::fill(const Color color) {
@@ -108,7 +112,10 @@ void Hub75Display::fillRect(const int16_t x, const int16_t y, const int16_t w, c
     const int32_t y1 = std::min<int32_t>(static_cast<int32_t>(y) + h, _config.height);
     if (x0 >= x1 || y0 >= y1) return;
 
-    _panel->fillRect(static_cast<int16_t>(x0), static_cast<int16_t>(y0),
+    // Turned over, the rect's far corner becomes its near one
+    const int32_t left = _orientation == Orientation::UpsideDown ? _config.width - x1 : x0;
+    const int32_t top = _orientation == Orientation::UpsideDown ? _config.height - y1 : y0;
+    _panel->fillRect(static_cast<int16_t>(left), static_cast<int16_t>(top),
                      static_cast<int16_t>(x1 - x0), static_cast<int16_t>(y1 - y0),
                      color.r, color.g, color.b);
 }
@@ -120,6 +127,10 @@ void Hub75Display::setBrightness(const uint8_t level) {
 
 uint8_t Hub75Display::brightness() const {
     return _config.brightness;
+}
+
+void Hub75Display::setOrientation(const Orientation orientation) {
+    _orientation = orientation;
 }
 
 void Hub75Display::present() {

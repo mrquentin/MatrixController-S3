@@ -26,6 +26,12 @@
     // Brownouts mean the panel pulled the supply down, so they are worth calling out
     let resetIsFault = $derived(['BROWNOUT', 'PANIC', 'INTERRUPT_WATCHDOG', 'TASK_WATCHDOG', 'WATCHDOG'].includes(status.data?.resetReason ?? ''));
 
+    function formatG(value: number | undefined): string {
+        return `${(value ?? 0) >= 0 ? '+' : '−'}${Math.abs(value ?? 0).toFixed(2)}`;
+    }
+
+    const ORIENTATION_MODES = { auto: 'Auto', upright: 'Upright', upsideDown: 'Flipped' };
+
     function formatBytes(bytes: number): string {
         if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
         return `${(bytes / 1024).toFixed(1)} KB`;
@@ -140,6 +146,31 @@
                     </div>
                 </div>
             </section>
+
+            {#if data.orientation}
+                <section>
+                    <h2 class="section-header">Orientation</h2>
+                    <div class="grouped">
+                        <div class="grouped-row">
+                            <span>Accelerometer</span>
+                            <span class="row-value {data.orientation.sensor ? '' : 'font-medium text-warning'}">{data.orientation.sensor ? 'Found' : 'Not found'}</span>
+                        </div>
+                        <div class="grouped-row">
+                            <span>Showing</span>
+                            <span class="row-value">{data.orientation.upsideDown ? 'Upside down' : 'Upright'} · {ORIENTATION_MODES[data.orientation.mode] ?? data.orientation.mode}</span>
+                        </div>
+                        {#if data.orientation.sensor}
+                            <!-- The axis pointing up reads about +1 g: tells which one runs along the panel's height -->
+                            <div class="grouped-row">
+                                <span>Gravity</span>
+                                <span class="row-value font-mono text-[0.8125rem] tabular-nums">
+                                    x {formatG(data.orientation.x)} · y {formatG(data.orientation.y)} · z {formatG(data.orientation.z)} g
+                                </span>
+                            </div>
+                        {/if}
+                    </div>
+                </section>
+            {/if}
         </div>
 
     </div>

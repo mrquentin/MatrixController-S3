@@ -51,6 +51,7 @@ DisplayConfig Config::parseDisplayConfig(const JsonObjectConst json) {
         display.brightness = MaxBrightness;
     }
     display.doubleBuffer = json["doubleBuffer"] | defaults.doubleBuffer;
+    display.orientation = parseOrientationMode(json["orientation"] | "", defaults.orientation);
 
     return display;
 }
