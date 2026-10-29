@@ -5,6 +5,11 @@ src/wifi_creds.h
 # Written at build time by version.py
 include/FirmwareVersion.h
 
+# The web UI, built into these by prebuild-ui.py (npm run build:full) before every firmware build.
+# Without hash.txt the UI is always rebuilt, so a fresh checkout or CI never uses stale headers
+include/ui/
+hash.txt
+
 # Release tooling (package.json) and its output
 node_modules/
 dist/
