@@ -8,6 +8,7 @@
 #include "ota/FirmwareUpdate.h"
 #include "ota/NetworkUpload.h"
 #include "ota/ReleaseUpdate.h"
+#include "sensors/AutoOrientation.h"
 
 #ifndef _HTTPHANDLERS_h
 #define _HTTPHANDLERS_h
@@ -30,10 +31,12 @@ class HttpHandlers {
         FirmwareUpdate& _firmwareUpdate;
         NetworkUpload& _networkUpload;
         ReleaseUpdate& _releaseUpdate;
+        AutoOrientation& _orientation;
 
     public:
         HttpHandlers(Config& config, AsyncWebServer& server, SystemManager& systemManager, AppManager& appManager,
-                     FirmwareUpdate& firmwareUpdate, NetworkUpload& networkUpload, ReleaseUpdate& releaseUpdate);
+                     FirmwareUpdate& firmwareUpdate, NetworkUpload& networkUpload, ReleaseUpdate& releaseUpdate,
+                     AutoOrientation& orientation);
         void setup();
 };
 

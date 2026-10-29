@@ -1,6 +1,6 @@
 <script lang="ts">
     import {apiRequest} from "$lib/api";
-    import type {SystemConfig, UpdateStatus} from "$lib/interfaces";
+    import type {OrientationMode, SystemConfig, UpdateStatus} from "$lib/interfaces";
     import {busyStore} from "$lib/services/busy.svelte";
     import {themeStore, type ThemeMode} from "$lib/services/theme.svelte";
     import {DEFAULT_DISPLAY_CONFIG, DEFAULT_TIMEZONE, DISPLAY_HEIGHTS, ENDPOINTS, MAX_BRIGHTNESS, TIMEZONES} from "$lib/config";
@@ -151,6 +151,11 @@
     let brightnessPercent = $derived(Math.round(modifiedConfig.display.brightness / MAX_BRIGHTNESS * 100));
 
     const heightOptions = DISPLAY_HEIGHTS.map(h => ({ value: h, label: `${h}` }));
+    const orientationOptions: { value: OrientationMode, label: string }[] = [
+        { value: 'auto', label: 'Auto' },
+        { value: 'upright', label: 'Upright' },
+        { value: 'upsideDown', label: 'Flipped' },
+    ];
     const themeOptions: { value: ThemeMode, label: string }[] = [
         { value: 'system', label: 'Automatic' },
         { value: 'light', label: 'Light' },
@@ -244,6 +249,12 @@
                                bind:value={modifiedConfig.display.brightness} class="slider"
                                style="--fill: {modifiedConfig.display.brightness / MAX_BRIGHTNESS * 100}%"/>
                     </div>
+                    <div class="grouped-row">
+                        <span class="shrink-0">Orientation</span>
+                        <div class="ml-auto w-56">
+                            <SegmentedControl label="Orientation" options={orientationOptions} bind:value={modifiedConfig.display.orientation}/>
+                        </div>
+                    </div>
                     <label class="grouped-row cursor-pointer">
                         <span>Double buffering</span>
                         <input type="checkbox" bind:checked={modifiedConfig.display.doubleBuffer} class="switch ml-auto"/>
@@ -252,7 +263,7 @@
                 {#if !widthValid}
                     <p class="section-footer text-error!">Width must be a whole number between 16 and 256.</p>
                 {:else}
-                    <p class="section-footer">Brightness applies when you save. Resolution and double buffering take effect after the controller restarts.</p>
+                    <p class="section-footer">Auto turns the picture over when the panel is hung upside down, using the board's accelerometer. Brightness and orientation apply when you save. Resolution and double buffering take effect after the controller restarts.</p>
                 {/if}
             </section>
 

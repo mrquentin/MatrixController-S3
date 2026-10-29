@@ -17,13 +17,30 @@ export interface SystemStatus {
     uptimeSeconds: number;
     resetReason: string;
     firmwareVersion: string;
+    orientation: OrientationStatus;
 }
+
+// Which way up the panel is shown, and the accelerometer reading behind it
+export interface OrientationStatus {
+    // Whether the board's accelerometer answered at boot
+    sensor: boolean;
+    mode: OrientationMode;
+    upsideDown: boolean;
+    // Latest reading in g, only with a sensor. The axis pointing up reads about +1
+    x?: number;
+    y?: number;
+    z?: number;
+}
+
+// Landscape only: auto follows the accelerometer, the others keep one way up
+export type OrientationMode = 'auto' | 'upright' | 'upsideDown';
 
 export interface DisplayConfig {
     width: number;
     height: number;
     brightness: number;
     doubleBuffer: boolean;
+    orientation: OrientationMode;
 }
 
 export interface SystemConfig {

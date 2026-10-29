@@ -6,6 +6,7 @@
 #include <memory>
 #include "display/IDisplay.h"
 #include "display/DisplayConfig.h"
+#include "display/Orientation.h"
 
 class MatrixPanel_I2S_DMA;
 
@@ -38,9 +39,15 @@ public:
 
     void present() override;
 
+    /// Turns the image by 180° from the next drawing call on. Width and height stay the same, so
+    /// apps don't notice; redraw the whole frame afterwards.
+    void setOrientation(Orientation orientation);
+    [[nodiscard]] Orientation orientation() const { return _orientation; }
+
 private:
     std::unique_ptr<MatrixPanel_I2S_DMA> _panel;
     DisplayConfig _config;
+    Orientation _orientation = Orientation::Upright;
 };
 
 #endif

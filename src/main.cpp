@@ -23,6 +23,7 @@
 #include "ota/FirmwareUpdate.h"
 #include "ota/NetworkUpload.h"
 #include "ota/ReleaseUpdate.h"
+#include "sensors/AutoOrientation.h"
 
 #define DEBUG true
 #define DEBUG_PRINT if(DEBUG) Serial
@@ -37,7 +38,9 @@ AppManager appManager = AppManager("/apps.json");
 FirmwareUpdate firmwareUpdate;
 NetworkUpload networkUpload(firmwareUpdate);
 ReleaseUpdate releaseUpdate(firmwareUpdate);
-HttpHandlers httpHandlers = HttpHandlers(config, server, systemManager, appManager, firmwareUpdate, networkUpload, releaseUpdate);
+AutoOrientation autoOrientation;
+HttpHandlers httpHandlers = HttpHandlers(config, server, systemManager, appManager, firmwareUpdate, networkUpload, releaseUpdate,
+                                         autoOrientation);
 WebSocketHandler wsHandler = WebSocketHandler(server, ws, systemManager);
 Hub75Display display;
 CaptivePortal portal(server);
@@ -78,6 +81,8 @@ constexpr uint32_t UpdateFailedScreenMs = 5000;
 // Set from the web server task when a config is saved, applied in loop(): only the loop task may draw
 std::atomic<int16_t> pendingBrightness{-1};
 std::atomic<bool> timezoneChanged{false};
+std::atomic<OrientationMode> pendingOrientation{OrientationMode::Auto};
+std::atomic<bool> orientationChanged{false};
 
 namespace {
     constexpr Color DetailColor{140, 140, 150};
@@ -227,6 +232,8 @@ namespace {
 
         config.onSaved([](const Config& saved) {
             pendingBrightness = saved.getDisplayConfig().brightness;
+            pendingOrientation = saved.getDisplayConfig().orientation;
+            orientationChanged = true;
             timezoneChanged = true;
         });
 
@@ -293,6 +300,9 @@ void setup() {
         displayConfig.fastRefresh = true;
         if (displayConfig.brightness < SetupMinBrightness) displayConfig.brightness = SetupMinBrightness;
     }
+    // Before anything is drawn, so even the test pattern is the right way up
+    autoOrientation.begin(displayConfig.orientation);
+    display.setOrientation(autoOrientation.current());
     if (display.begin(displayConfig)) {
         drawTestPattern(display);
         display.present();
@@ -317,6 +327,10 @@ void loop() {
     // Ends the probation of freshly updated firmware once it has been running fine for a while;
     // a crash or restart before that rolls back to the previous one
     FirmwareUpdate::confirmWhenHealthy(now - setupDoneMs);
+
+    // Only between frames: every screen redraws in full, so the next one comes out the new way up
+    if (orientationChanged.exchange(false)) autoOrientation.setMode(pendingOrientation);
+    display.setOrientation(autoOrientation.update(now));
 
     if (setupMode) {
         loopSetupMode(now);

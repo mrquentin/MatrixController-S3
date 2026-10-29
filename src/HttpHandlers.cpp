@@ -24,9 +24,11 @@
 #define DEBUG_PRINTF if(DEBUG)printf
 
 HttpHandlers::HttpHandlers(Config& config, AsyncWebServer &server, SystemManager &systemManager, AppManager &appManager,
-                           FirmwareUpdate& firmwareUpdate, NetworkUpload& networkUpload, ReleaseUpdate& releaseUpdate) :
+                           FirmwareUpdate& firmwareUpdate, NetworkUpload& networkUpload, ReleaseUpdate& releaseUpdate,
+                           AutoOrientation& orientation) :
     _config(config), _server(server), _systemManager(systemManager), _appManager(appManager),
-    _firmwareUpdate(firmwareUpdate), _networkUpload(networkUpload), _releaseUpdate(releaseUpdate) {}
+    _firmwareUpdate(firmwareUpdate), _networkUpload(networkUpload), _releaseUpdate(releaseUpdate),
+    _orientation(orientation) {}
 
 void HttpHandlers::setup() {
     addHandlerRoot();
@@ -97,6 +99,18 @@ void HttpHandlers::addHandlerApiStatus() {
         doc["uptimeSeconds"] = status.uptimeSeconds;
         doc["resetReason"] = status.resetReason;
         doc["firmwareVersion"] = FirmwareUpdate::version();
+
+        // Lets the accelerometer be checked from the web UI: the reading tells which axis points up
+        const JsonObject orientation = doc["orientation"].to<JsonObject>();
+        orientation["sensor"] = _orientation.sensorPresent();
+        orientation["mode"] = orientationModeName(_orientation.mode());
+        orientation["upsideDown"] = _orientation.current() == Orientation::UpsideDown;
+        if (_orientation.sensorPresent()) {
+            const Acceleration reading = _orientation.lastReading();
+            orientation["x"] = reading.x;
+            orientation["y"] = reading.y;
+            orientation["z"] = reading.z;
+        }
 
         String response;
         serializeJson(doc, response);
