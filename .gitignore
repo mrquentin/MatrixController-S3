@@ -13,3 +13,6 @@ hash.txt
 # Release tooling (package.json) and its output
 node_modules/
 dist/
+
+# Claude Code worktrees, nested repositories that git would otherwise add as broken submodules
+.claude/worktrees/
