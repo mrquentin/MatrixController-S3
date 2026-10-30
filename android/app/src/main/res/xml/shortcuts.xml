@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon: "Change address" -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="change_address"
+        android:shortcutShortLabel="@string/change_address">
+        <intent
+            android:action="com.mrquentinet.matrixcontroller.CHANGE_ADDRESS"
+            android:targetClass="com.mrquentinet.matrixcontroller.MainActivity"
+            android:targetPackage="com.mrquentinet.matrixcontroller" />
+    </shortcut>
+</shortcuts>

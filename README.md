@@ -5,6 +5,7 @@ a clock, weather, live F1 timing (from MultiViewer) and scrolling text, set up f
 
 - `src/`, `include/`: the firmware (PlatformIO, Arduino framework)
 - `ui/`: the web UI (Svelte), built into the firmware as `include/ui/*.h`
+- `android/`: a small Android app that shows the web UI full screen (see below)
 - `test/`: firmware unit tests, run on the computer
 
 ## Building and flashing
@@ -23,6 +24,20 @@ The controller looks for new releases by itself twice a day and flags them there
 The picture follows the board's accelerometer, so the panel can hang either way up (landscape only).
 Settings → Panel → Orientation can fix it upright or flipped instead; Status → Orientation shows the
 sensor's readings.
+
+## Android app
+
+Chrome only installs a real app for HTTPS sites and the board serves plain HTTP, so `android/` wraps
+the web UI in a full-screen WebView instead (about 30 KB, no libraries):
+
+```sh
+cd android
+./gradlew assembleRelease     # app/build/outputs/apk/release/app-release.apk, signed with the debug key
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+It opens http://matrixcontroller.local (the board's mDNS name). If nothing answers there it offers to
+retry; long-press the app icon → Change address to point it somewhere else.
 
 ## Tests
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Matrix</string>
+    <string name="change_address">Change address</string>
+    <string name="unreachable_title">Can\'t reach the controller</string>
+    <string name="unreachable_message">Nothing answered at this address. Check that the phone is on the same WiFi as the panel.</string>
+    <string name="address_title">Controller address</string>
+    <string name="retry">Retry</string>
+    <string name="open">Open</string>
+    <string name="cancel">Cancel</string>
+</resources>
