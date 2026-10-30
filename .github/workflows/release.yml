@@ -1,8 +1,8 @@
 # Every push to main (a merged pull request) is checked again, then semantic-release reads the
 # conventional commits since the last release to decide the next version. If there's one (any
 # feat or fix), it builds the firmware with that version, tags it and publishes a GitHub release
-# with firmware.bin, which boards install from their Firmware page. Commits like docs or chore
-# release nothing.
+# with firmware.bin, which boards install from their Firmware page, and the Android app built with
+# the same version (MatrixController.apk). Commits like docs or chore release nothing.
 name: Release
 
 on:
@@ -61,7 +61,25 @@ jobs:
           npm ci
           npm ci --prefix ui
       - run: pip install platformio
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      # Every release's APK is signed with this key so it installs over the previous one. The
+      # secrets hold a keystore (base64), its password, and the key's alias and password.
+      - name: Android release key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
       - name: Release
         run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
