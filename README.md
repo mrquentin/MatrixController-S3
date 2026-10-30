@@ -28,7 +28,10 @@ sensor's readings.
 ## Android app
 
 Chrome only installs a real app for HTTPS sites and the board serves plain HTTP, so `android/` wraps
-the web UI in a full-screen WebView instead (about 30 KB, no libraries):
+the web UI in a full-screen WebView instead (about 30 KB, no libraries). Every release has it as
+`MatrixController.apk`; the latest one is always at
+https://github.com/mrquentin/MatrixController-S3/releases/latest/download/MatrixController.apk.
+Installing a newer one over it keeps its settings. To build it yourself:
 
 ```sh
 cd android
@@ -53,7 +56,13 @@ Every pull request runs the UI checks, the firmware tests and the firmware build
 (`.github/workflows/ci.yml`). Merging to `main` releases automatically
 (`.github/workflows/release.yml`): [semantic-release](https://semantic-release.gitbook.io/) picks the
 next version from the commits since the last release, builds the firmware with it and publishes a
-GitHub release with `firmware.bin`. Nobody edits version numbers.
+GitHub release with `firmware.bin` and the Android app (`MatrixController.apk`, same version). Nobody
+edits version numbers.
+
+Release APKs are signed with a fixed key so each installs over the last, kept in the repository's
+Actions secrets: `ANDROID_KEYSTORE_BASE64` (the keystore, base64), `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Losing it means uninstalling the app once to move to
+a new key.
 
 Pull requests are squash-merged, so their title becomes the commit message and must follow
 [Conventional Commits](https://www.conventionalcommits.org/):

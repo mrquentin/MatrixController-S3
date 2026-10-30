@@ -38,6 +38,17 @@ updates:
       - dependency-name: conventional-changelog-conventionalcommits
         update-types: [version-update:semver-major]
 
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      android:
+        update-types: [minor, patch]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
