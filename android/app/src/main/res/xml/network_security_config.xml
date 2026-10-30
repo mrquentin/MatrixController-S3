@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- The board's address is user-set (matrixcontroller.local or an IP), so allow HTTP anywhere -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
