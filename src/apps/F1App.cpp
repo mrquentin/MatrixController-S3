@@ -4,6 +4,7 @@
 #include <sys/time.h>
 #include <cstdio>
 #include <cstring>
+#include "display/Shapes.h"
 #include "display/Text.h"
 #include "net/HttpJson.h"
 
@@ -21,10 +22,13 @@ namespace {
     constexpr uint32_t FlagFullScreenMs = 5000;
     // The green flag's band then goes away after this long; other flags keep their band
     constexpr uint32_t GreenBandMs = 10000;
+    // With both a flag band and a pit lane closure, the band switches between them this often
+    constexpr uint32_t BandAlternateMs = 3000;
 
     constexpr Color MeetingColor{170, 170, 180};
     constexpr Color LabelColor{140, 140, 150};
     constexpr Color MessageDetailColor{140, 140, 150};
+    constexpr Color PitLightColor{230, 0, 0};
 
     constexpr int32_t BandHeight = 14;
 
@@ -107,6 +111,19 @@ namespace {
 
         display.fillRect(0, top, static_cast<int16_t>(display.width()), BandHeight, style.background);
         drawCenteredLine(display, textY, style.band, style.foreground);
+    }
+
+    /// Black band with the red pit exit light on the left, so it can't be mistaken for a red flag.
+    void drawPitBand(IDisplay& display, const F1::PitLane pit) {
+        const char* text = pit == F1::PitLane::Closed        ? "PIT LANE CLOSED"
+                           : pit == F1::PitLane::EntryClosed ? "PIT ENTRY CLOSED"
+                                                             : "PIT EXIT CLOSED";
+        const auto top = static_cast<int16_t>(display.height() - BandHeight);
+        display.fillRect(0, top, static_cast<int16_t>(display.width()), BandHeight, Colors::Black);
+        display.fillRect(0, top, static_cast<int16_t>(display.width()), 1, PitLightColor);
+        const int32_t middle = top + 1 + (BandHeight - 1) / 2;
+        fillCircle(display, 7, middle, 3, PitLightColor);
+        drawCenteredLine(display, middle - textHeight() / 2, text, Colors::White);
     }
 
     /// True for flags announced full screen before moving to the band.
@@ -342,8 +359,15 @@ void F1App::renderLive(IDisplay& display, const uint32_t nowMs) {
             break;
     }
 
-    const bool bandVisible = flag != Flag::None && (flag != Flag::Green || flagAge < FlagFullScreenMs + GreenBandMs);
-    if (bandVisible) drawFlagBand(display, flag);
+    const bool flagBand = flag != Flag::None && (flag != Flag::Green || flagAge < FlagFullScreenMs + GreenBandMs);
+    const F1::PitLane pit = F1::pitLane(_state);
+    const bool pitBand = pit != F1::PitLane::Open;
+    // Both: the flag first, then the pit lane, in turns
+    if (flagBand && (!pitBand || nowMs / BandAlternateMs % 2 == 0)) {
+        drawFlagBand(display, flag);
+    } else if (pitBand) {
+        drawPitBand(display, pit);
+    }
 }
 
 void F1App::renderTopDrivers(IDisplay& display, const uint32_t nowMs, const char* label) const {

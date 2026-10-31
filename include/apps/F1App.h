@@ -11,7 +11,7 @@
 
 /// F1 session status from a MultiViewer instance on the local network, read through its
 /// GraphQL API: lap count in races and sprints, Q1-Q3 (SQ1-SQ3) and time left in qualifying,
-/// time left in practice, and the current flag in every session.
+/// time left in practice, and the current flag and any pit lane closure in every session.
 class F1App final : public App {
 public:
     F1App();

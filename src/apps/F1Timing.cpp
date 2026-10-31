@@ -119,9 +119,10 @@ namespace F1 {
             // Qualifying needs TimingData for SessionPart, practice its Lines plus DriverList for the codes
             if (isQualifying(last->kind) || showsTopDrivers(last->kind)) topics += " TimingData";
             if (showsTopDrivers(last->kind)) topics += " DriverList";
-            // Grows to hundreds of messages over a race, so only while there is a yellow to look into
-            if (last->trackStatus == 2) topics += " RaceControlMessages";
         }
+        // Grows to hundreds of messages over a race, but it is the only source for double yellows
+        // and pit lane closures; the response filter keeps only a few short fields of each
+        topics += " RaceControlMessages";
         return "{ f1LiveTimingState { " + topics + " } f1LiveTimingClock { paused trackTime systemTime } }";
     }
 
@@ -147,6 +148,7 @@ namespace F1 {
         timing["RaceControlMessages"]["Messages"][0]["Flag"] = true;
         timing["RaceControlMessages"]["Messages"][0]["Scope"] = true;
         timing["RaceControlMessages"]["Messages"][0]["Sector"] = true;
+        timing["RaceControlMessages"]["Messages"][0]["Message"] = true;
         filter["data"]["f1LiveTimingClock"] = true;
     }
 
@@ -187,6 +189,8 @@ namespace F1 {
         enum : uint8_t { NoFlag, YellowFlag, DoubleYellowFlag };
         uint8_t sectors[MaxSectors] = {};
         for (const JsonObjectConst message : timing["RaceControlMessages"]["Messages"].as<JsonArrayConst>()) {
+            applyPitMessage(message["Message"] | "", state);
+
             const char* flag = message["Flag"] | "";
             const char* scope = message["Scope"] | "";
             const bool clear = strcmp(flag, "CLEAR") == 0 || strcmp(flag, "GREEN") == 0;
@@ -264,6 +268,27 @@ namespace F1 {
             case 7: return Flag::VscEnding;
             default: return Flag::None;
         }
+    }
+
+    void applyPitMessage(const char* message, LiveState& state) {
+        if (!contains(message, "PIT") || contains(message, "WILL")) return;
+        const bool closed = contains(message, "CLOSED");
+        if (!closed && !contains(message, "OPEN")) return;
+
+        bool entry = contains(message, "ENTRY");
+        bool exit = contains(message, "EXIT");
+        // "PIT LANE CLOSED": both ends
+        if (!entry && !exit && contains(message, "PIT LANE")) entry = exit = true;
+        if (entry) state.pitEntryClosed = closed;
+        if (exit) state.pitExitClosed = closed;
+    }
+
+    PitLane pitLane(const LiveState& state) {
+        if (currentFlag(state) == Flag::Chequered) return PitLane::Open;
+        // The pit exit is closed while the session is red flagged, message or not
+        const bool exitClosed = state.pitExitClosed || state.trackStatus == 5 || state.sessionStatus == "Aborted";
+        if (state.pitEntryClosed) return exitClosed ? PitLane::Closed : PitLane::EntryClosed;
+        return exitClosed ? PitLane::ExitClosed : PitLane::Open;
     }
 
     void formatClock(const int64_t ms, char* out, const size_t size) {

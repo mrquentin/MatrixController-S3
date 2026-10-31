@@ -17,6 +17,9 @@ namespace F1 {
     /// What the bottom band shows, from most to least important.
     enum class Flag : uint8_t { None, Green, Yellow, DoubleYellow, SafetyCar, VirtualSafetyCar, VscEnding, Red, Chequered };
 
+    /// Which ends of the pit lane are closed.
+    enum class PitLane : uint8_t { Open, EntryClosed, ExitClosed, Closed };
+
     /// A driver in the session's top positions.
     struct Driver {
         std::string code;             // three-letter code, e.g. "VER"
@@ -35,6 +38,9 @@ namespace F1 {
         // TrackStatus only says "yellow"; whether a sector has a double yellow comes from the race
         // control messages, which are only fetched while TrackStatus is yellow
         bool doubleYellow = false;
+        // Pit lane closures, from the race control messages ("PIT EXIT CLOSED", "PIT ENTRY OPEN"...)
+        bool pitEntryClosed = false;
+        bool pitExitClosed = false;
         int currentLap = 0;           // 0 when the session has no lap count
         int totalLaps = 0;
         int qualifyingPart = 0;       // 1-3 during (sprint) qualifying, 0 otherwise
@@ -73,6 +79,14 @@ namespace F1 {
     int64_t remainingMs(const LiveState& state, uint32_t nowMs);
 
     Flag currentFlag(const LiveState& state);
+
+    /// Pit lane closures to show: the race control messages, plus the pit exit closed under a red
+    /// flag. Open once the session is over.
+    PitLane pitLane(const LiveState& state);
+
+    /// Applies one race control message to the pit lane state, if it opens or closes the pit entry
+    /// or exit. Announcements like "PIT EXIT WILL OPEN AT 15:10" change nothing.
+    void applyPitMessage(const char* message, LiveState& state);
 
     /// True for sessions that report a qualifying part (Q1-Q3 / SQ1-SQ3).
     bool isQualifying(SessionKind kind);
