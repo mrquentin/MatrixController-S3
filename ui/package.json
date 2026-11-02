@@ -21,7 +21,6 @@
     "svelte-check": "^4.7.7",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
-    "vite-plugin-compression2": "^2.5.3",
     "vite-plugin-singlefile": "^2.3.4",
     "vitest": "^5.0.5"
   },
