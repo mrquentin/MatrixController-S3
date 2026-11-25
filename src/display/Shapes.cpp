@@ -19,7 +19,6 @@ namespace {
 }
 
 void drawLine(IDisplay& display, int32_t x0, int32_t y0, const int32_t x1, const int32_t y1, const Color color) {
-    // Bresenham
     const int32_t dx = std::abs(x1 - x0);
     const int32_t dy = -std::abs(y1 - y0);
     const int32_t sx = x0 < x1 ? 1 : -1;
@@ -44,7 +43,6 @@ void drawLine(IDisplay& display, int32_t x0, int32_t y0, const int32_t x1, const
 void drawCircle(IDisplay& display, const int32_t cx, const int32_t cy, const int32_t radius, const Color color) {
     if (radius < 0) return;
 
-    // Midpoint circle: walk one octant and mirror it
     int32_t x = radius;
     int32_t y = 0;
     int32_t error = 1 - radius;

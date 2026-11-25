@@ -14,6 +14,7 @@
 /// draw meanwhile: the onProgress callback is the place to update the panel.
 class NetworkUpload {
 public:
+    /// Also in platformio.ini (upload_flags of env:ota)
     static constexpr uint16_t Port = 3232;
 
     explicit NetworkUpload(FirmwareUpdate& update);

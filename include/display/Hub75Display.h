@@ -25,7 +25,6 @@ public:
     /// Call only once: the driver doesn't release its DMA channel when a panel is destroyed, so a
     /// second panel can't connect while the first one's channel keeps reading freed memory.
     bool begin(const DisplayConfig& config);
-    [[nodiscard]] bool isReady() const;
 
     [[nodiscard]] uint16_t width() const override;
     [[nodiscard]] uint16_t height() const override;
@@ -34,15 +33,14 @@ public:
     void fill(Color color) override;
     void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, Color color) override;
 
-    void setBrightness(uint8_t level) override;
-    [[nodiscard]] uint8_t brightness() const override;
+    /// Capped at MaxBrightness.
+    void setBrightness(uint8_t level);
 
     void present() override;
 
     /// Turns the image by 180° from the next drawing call on. Width and height stay the same, so
     /// apps don't notice; redraw the whole frame afterwards.
     void setOrientation(Orientation orientation);
-    [[nodiscard]] Orientation orientation() const { return _orientation; }
 
 private:
     std::unique_ptr<MatrixPanel_I2S_DMA> _panel;

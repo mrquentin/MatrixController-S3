@@ -4,6 +4,7 @@
     import {busyStore} from "$lib/services/busy.svelte";
     import {FADE_MS} from "$lib/motion";
     import Icon from "$lib/Icon.svelte";
+    import Alert from "$lib/Alert.svelte";
 
     // Save is only enabled when there is something valid to save; Revert appears with unsaved edits
     let { dirty, valid = true, error, errorTitle, onSave, onRevert }: {
@@ -29,13 +30,7 @@
 
 <div class="grid gap-2">
     {#if error}
-        <div role="alert" class="flex items-start gap-3 rounded-box bg-error/10 px-4 py-3 text-error" transition:fade={{ duration: fadeMs }}>
-            <Icon name="warning" class="mt-0.5 size-5 shrink-0"/>
-            <div>
-                <p class="font-semibold">{errorTitle}</p>
-                <p class="text-[0.875rem] opacity-80">{error}</p>
-            </div>
-        </div>
+        <div transition:fade={{ duration: fadeMs }}><Alert title={errorTitle} message={error}/></div>
     {/if}
     <button class="btn btn-primary pressable h-12 rounded-box text-[1.0625rem] font-semibold shadow-none {justSaved && !dirty ? 'disabled:bg-success disabled:text-success-content' : 'disabled:bg-base-content/10 disabled:text-base-content/35'}"
             onclick={save} disabled={!dirty || !valid || busyStore.active}>

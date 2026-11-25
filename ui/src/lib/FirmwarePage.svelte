@@ -1,16 +1,21 @@
 <script lang="ts">
     import {apiRequest, errorDetails} from "$lib/api";
     import {busyStore} from "$lib/services/busy.svelte";
-    import {ENDPOINTS, UPDATE_PASSWORD_HEADER, UPDATE_PASSWORD_MAX, UPDATE_PASSWORD_MIN} from "$lib/config";
+    import {ENDPOINTS, UPDATE_PASSWORD_HEADER} from "$lib/config";
+    import {formatBytes} from "$lib/format";
     import type {UpdateStatus} from "$lib/interfaces";
     import PageHeader from "$lib/PageHeader.svelte";
     import ConfirmDialog from "$lib/ConfirmDialog.svelte";
     import Icon from "$lib/Icon.svelte";
+    import BackButton from "$lib/BackButton.svelte";
+    import Alert from "$lib/Alert.svelte";
 
     // Firmware version, update password and installing updates. onInstalled runs once the board
     // has an update in and restarts into it
-    let { status, reload, onBack, onInstalled }: {
+    let { status, error, reload, onBack, onInstalled }: {
         status: UpdateStatus | null,
+        // Why the status couldn't be loaded
+        error: string | null,
         reload: () => Promise<void>,
         onBack: () => void,
         onInstalled: (version: string | null) => void
@@ -23,7 +28,8 @@
     let passwordError = $state<string | null>(null);
     let passwordSaved = $state(false);
     let changingPassword = $state(false);
-    let newPasswordValid = $derived(newPassword.length >= UPDATE_PASSWORD_MIN && newPassword.length <= UPDATE_PASSWORD_MAX);
+    let newPasswordValid = $derived(!!status && newPassword.length >= status.passwordMinLength
+        && newPassword.length <= status.passwordMaxLength);
 
     // Installing: the password goes with every update request
     let password = $state('');
@@ -35,11 +41,9 @@
     // 0-1 while this page is uploading a file
     let uploadProgress = $state<number | null>(null);
 
-    // Largest image that fits an app slot of partitions-8MB-tinyuf2.csv
-    const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
     let fileProblem = $derived(!file ? null
         : !file.name.toLowerCase().endsWith('.bin') ? 'Pick the firmware.bin of a build'
-        : file.size > MAX_IMAGE_SIZE ? 'This file is too large for the controller' : null);
+        : status && file.size > status.maxSize ? 'This file is too large for the controller' : null);
 
     let running = $derived(status?.state === 'running');
     let releaseBusy = $derived(!!status?.release?.busy);
@@ -66,10 +70,6 @@
         }
     });
 
-    function formatSize(bytes: number): string {
-        return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${Math.round(bytes / 1024)} KB`;
-    }
-
     function formatAgo(seconds: number): string {
         if (seconds < 60) return 'Just now';
         if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
@@ -86,7 +86,7 @@
     async function savePassword() {
         passwordError = null;
         passwordSaved = false;
-        const response = await busyStore.run(() => apiRequest<null>(ENDPOINTS.POST_UPDATE_PASSWORD, "POST",
+        const response = await busyStore.run(() => apiRequest<null>(ENDPOINTS.UPDATE_PASSWORD, "POST",
             { current: currentPassword, password: newPassword }));
         if (response.error) {
             passwordError = response.error;
@@ -103,7 +103,7 @@
 
     // Asks before a long upload, which the board would otherwise only refuse at the end
     async function verifyPassword(): Promise<boolean> {
-        const response = await apiRequest<null>(ENDPOINTS.POST_UPDATE_VERIFY, "POST", undefined,
+        const response = await apiRequest<null>(ENDPOINTS.UPDATE_VERIFY, "POST", undefined,
             { [UPDATE_PASSWORD_HEADER]: password });
         installError = response.error;
         return !response.error;
@@ -113,7 +113,7 @@
     function send(image: File): Promise<string | null> {
         return new Promise(resolve => {
             const request = new XMLHttpRequest();
-            request.open('POST', ENDPOINTS.POST_UPDATE);
+            request.open('POST', ENDPOINTS.UPDATE);
             // Anything else (e.g. a form encoding) the board would try to parse instead of flashing
             request.setRequestHeader('Content-Type', 'application/octet-stream');
             request.setRequestHeader(UPDATE_PASSWORD_HEADER, password);
@@ -156,14 +156,14 @@
 
     async function checkRelease() {
         installError = null;
-        const response = await busyStore.run(() => apiRequest<null>(ENDPOINTS.POST_RELEASE_CHECK, "POST"));
+        const response = await busyStore.run(() => apiRequest<null>(ENDPOINTS.RELEASE_CHECK, "POST"));
         if (response.error) installError = response.error;
         await reload();
     }
 
     async function installRelease() {
         installError = null;
-        const response = await busyStore.run(() => apiRequest<null>(ENDPOINTS.POST_RELEASE_INSTALL, "POST", undefined,
+        const response = await busyStore.run(() => apiRequest<null>(ENDPOINTS.RELEASE_INSTALL, "POST", undefined,
             { [UPDATE_PASSWORD_HEADER]: password }));
         if (response.error) installError = response.error;
         await reload();
@@ -175,13 +175,13 @@
     }
 </script>
 
-<button type="button" class="pressable -ml-1.5 mb-3 flex items-center gap-0.5 rounded-md py-1 pr-2 text-[1.0625rem] text-primary" onclick={onBack}>
-    <Icon name="back" class="size-5" strokeWidth={2.5}/> Settings
-</button>
+<BackButton label="Settings" {onBack}/>
 
 <PageHeader title="Firmware" subtitle={status ? `Version ${status.version}` : undefined}/>
 
-{#if !status}
+{#if !status && error}
+    <Alert title="Couldn't reach the controller" message={error}/>
+{:else if !status}
     <p class="text-base-content/55">Loading...</p>
 {:else}
 <div class="grid gap-8">
@@ -209,7 +209,7 @@
             </div>
         </div>
         {#if status.onProbation}
-            <p class="section-footer">Just updated: if this version crashes or restarts in its first 30 seconds, the controller goes back to the previous one.</p>
+            <p class="section-footer">Just updated: if this version crashes or restarts in its first {status.probationSeconds} seconds, the controller goes back to the previous one.</p>
         {/if}
     </section>
 
@@ -236,9 +236,9 @@
                 {/if}
                 <label class="grouped-row cursor-text">
                     <span class="w-24 shrink-0">{status.passwordSet ? 'New' : 'Password'}</span>
-                    <input bind:value={newPassword} type={showPasswords ? 'text' : 'password'} maxlength={UPDATE_PASSWORD_MAX}
+                    <input bind:value={newPassword} type={showPasswords ? 'text' : 'password'} maxlength={status.passwordMaxLength}
                            autocomplete="new-password" class="min-w-0 flex-1 bg-transparent outline-none"
-                           placeholder="{UPDATE_PASSWORD_MIN} characters or more"/>
+                           placeholder="{status.passwordMinLength} characters or more"/>
                     <button type="button" class="shrink-0 text-[0.8125rem] text-primary" onclick={() => showPasswords = !showPasswords}>
                         {showPasswords ? 'Hide' : 'Show'}
                     </button>
@@ -306,9 +306,9 @@
             {:else if release.updateAvailable}
                 <p class="section-footer">Downloads the release from GitHub and restarts into it. Your settings and WiFi are kept.</p>
             {:else if release.latest}
-                <p class="section-footer">Up to date. The controller also checks by itself twice a day.</p>
+                <p class="section-footer">Up to date. The controller also checks by itself every {release.checkIntervalHours} hours.</p>
             {:else}
-                <p class="section-footer">Looks for new releases of {release.repo} on GitHub, by itself twice a day too.</p>
+                <p class="section-footer">Looks for new releases of {release.repo} on GitHub, by itself every {release.checkIntervalHours} hours too.</p>
             {/if}
         </section>
     {/if}
@@ -324,7 +324,7 @@
                 </label>
                 <button type="button" class="grouped-row pressable-row" disabled={installing} onclick={() => fileInput?.click()}>
                     <span class="shrink-0">File</span>
-                    <span class="row-value truncate">{file ? `${file.name}, ${formatSize(file.size)}` : 'Choose...'}</span>
+                    <span class="row-value truncate">{file ? `${file.name}, ${formatBytes(file.size)}` : 'Choose...'}</span>
                     <Icon name="chevron" class="size-4 shrink-0 text-base-content/30" strokeWidth={2.5}/>
                 </button>
                 <input bind:this={fileInput} type="file" accept=".bin,application/octet-stream" class="hidden" onchange={pickFile}/>
@@ -355,18 +355,9 @@
     {/if}
 
     {#if installError || (status.state === 'failed' && status.error)}
-        <div role="alert" class="flex items-start gap-3 rounded-box bg-error/10 px-4 py-3">
-            <Icon name="warning" class="mt-0.5 size-5 shrink-0 text-error"/>
-            <div>
-                <p class="font-semibold text-error">Update not installed</p>
-                <p class="text-[0.875rem] text-base-content/70">
-                    {installError ?? status.error}.
-                    {!installError && status.files
-                        ? 'The file system was only partly written: upload it again from PlatformIO.'
-                        : `The controller carries on with version ${status.version}.`}
-                </p>
-            </div>
-        </div>
+        <Alert title="Update not installed" message="{installError ?? status.error}. {!installError && status.files
+            ? 'The file system was only partly written: upload it again from PlatformIO.'
+            : `The controller carries on with version ${status.version}.`}"/>
     {/if}
 
     <section>

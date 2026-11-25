@@ -1,3 +1,6 @@
+import {fade, fly} from "svelte/transition";
+import {prefersReducedMotion} from "svelte/motion";
+
 // Svelte springs integrate per 60fps frame with unit mass, so
 //   stiffness = (2π / (response · 60))²   and   damping = 2 · ζ · √stiffness
 // These map to Apple's default UI spring: damping ratio ζ = 1.0, response ≈ 0.32s.
@@ -5,3 +8,10 @@ export const SPRING_DEFAULT = { stiffness: 0.107, damping: 0.654 };
 
 // Short cross-fade used for content changes; collapses to nothing with reduced motion
 export const FADE_MS = 180;
+
+// Pushed views slide in from the trailing edge (1); going back brings the list in from the leading edge (-1)
+export function push(node: Element, { direction }: { direction: 1 | -1 }) {
+    return prefersReducedMotion.current
+        ? fade(node, { duration: FADE_MS })
+        : fly(node, { x: 24 * direction, duration: 260, opacity: 0 });
+}

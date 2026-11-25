@@ -19,9 +19,7 @@ public:
     [[nodiscard]] const char* id() const override { return "f1"; }
     [[nodiscard]] const char* name() const override { return "F1"; }
 
-    void describeConfig(ConfigSchema& schema) const override;
-    void getConfig(JsonObject config) const override;
-    void setConfig(JsonObjectConst config) override;
+    void settings(AppSettings& settings) override;
 
     void activate() override;
     void deactivate() override;

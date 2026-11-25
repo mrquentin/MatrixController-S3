@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'path'
 import zlib from 'node:zlib'
 
-// Text files the firmware serves gzipped (see HttpHandlers.cpp); images are compressed already
+// Text files the firmware serves gzipped (see ui/hexdump.py); images are compressed already
 const COMPRESSED = /\.(html|css|js|svg)$/
 
 /**
@@ -51,19 +51,14 @@ export default defineConfig({
     }
   },
   build: {
-    // 1. Force all assets into the root folder (no /assets/ subfolder)
-    assetsDir: './',
-    // 2. Clear the folder before building
     emptyOutDir: true,
-    // 3. Optional: Minify more aggressively for ESP32
     target: 'esnext',
-    // Embed bigger assets directly into the output HTML
-    assetsInlineLimit: 4096000
   },
-    server: {
-        proxy: {
-            '/api': 'http://matrixcontroller.local/', // Your ESP32's actual IP
-            '/ws': 'ws://matrixcontroller.local/' // Your ESP32's actual IP
-        }
+  // npm run dev talks to the board at its mDNS name (include/net/Hostname.h)
+  server: {
+    proxy: {
+      '/api': 'http://matrixcontroller.local/',
+      '/ws': { target: 'ws://matrixcontroller.local/', ws: true },
     }
+  }
 })

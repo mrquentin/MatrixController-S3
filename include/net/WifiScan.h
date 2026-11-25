@@ -11,6 +11,9 @@ namespace WifiScan {
     /// background, so asking again picks up changes. The list stays empty while the first scan is
     /// still running; callers ask again a moment later.
     void listNetworks(JsonArray list);
+
+    /// 0-100 from a signal strength in dBm: -100 or weaker is 0, -50 or stronger is 100.
+    int qualityFromRssi(int32_t rssi);
 }
 
 #endif

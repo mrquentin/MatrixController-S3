@@ -6,7 +6,6 @@ void drawTestPattern(IDisplay& display) {
 
     display.clear();
 
-    // Top two thirds: one bar per primary plus white, inside the border
     constexpr Color bars[] = {Colors::Red, Colors::Green, Colors::Blue, Colors::White};
     constexpr int16_t barCount = sizeof(bars) / sizeof(bars[0]);
     const int16_t innerWidth = static_cast<int16_t>(w - 2);
@@ -17,7 +16,6 @@ void drawTestPattern(IDisplay& display) {
         display.fillRect(x0, 1, static_cast<int16_t>(x1 - x0), barHeight, bars[i]);
     }
 
-    // Bottom third: black to white gradient
     const int16_t gradientTop = static_cast<int16_t>(1 + barHeight);
     const int16_t gradientHeight = static_cast<int16_t>(h - 1 - gradientTop);
     for (int16_t x = 1; x < w - 1; ++x) {
@@ -25,7 +23,6 @@ void drawTestPattern(IDisplay& display) {
         display.fillRect(x, gradientTop, 1, gradientHeight, Color::lerp(Colors::Black, Colors::White, t));
     }
 
-    // Border last so it is never overdrawn
     display.fillRect(0, 0, w, 1, Colors::White);
     display.fillRect(0, static_cast<int16_t>(h - 1), w, 1, Colors::White);
     display.fillRect(0, 0, 1, h, Colors::White);

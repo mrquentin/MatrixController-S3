@@ -27,10 +27,15 @@ public:
     virtual void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, Color color);
     void clear() { fill(Colors::Black); }
 
-    virtual void setBrightness(uint8_t level) = 0;
-    [[nodiscard]] virtual uint8_t brightness() const = 0;
-
     virtual void present() = 0;
+
+protected:
+    /// The part of a rectangle that lies on the display, as [x0, x1) x [y0, y1); empty if x0 >= x1 or y0 >= y1.
+    struct Span {
+        int32_t x0, y0, x1, y1;
+        [[nodiscard]] bool empty() const { return x0 >= x1 || y0 >= y1; }
+    };
+    [[nodiscard]] Span clip(int16_t x, int16_t y, int16_t w, int16_t h) const;
 };
 
 #endif

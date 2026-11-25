@@ -10,33 +10,16 @@ TextApp::TextApp() {
     applySettings();
 }
 
-void TextApp::describeConfig(ConfigSchema& schema) const {
-    schema.text("message", "Message", MaxMessageLength);
-    schema.color("color", "Color");
-    schema.number("speed", "Speed (pixels per second)", 5, 200);
-    schema.number("size", "Size", 1, 4);
-}
-
-void TextApp::getConfig(JsonObject config) const {
-    config["message"] = _message;
-    writeColor(config, "color", _color);
-    config["speed"] = _speed;
-    config["size"] = _size;
-}
-
-void TextApp::setConfig(const JsonObjectConst config) {
-    if (const char* message = config["message"]) {
-        _message = std::string(message).substr(0, MaxMessageLength);
-    }
-    _color = readColor(config["color"], _color);
-    _speed = readNumber(config["speed"], _speed, 5, 200);
-    _size = readNumber(config["size"], _size, 1, 4);
+void TextApp::settings(AppSettings& settings) {
+    settings.text("message", "Message", _message, MaxMessageLength);
+    settings.color("color", "Color", _color);
+    settings.number("speed", "Speed (pixels per second)", _speed, 5, 200);
+    settings.number("size", "Size", _size, 1, 4);
     applySettings();
 }
 
 void TextApp::activate() {
-    // Start from the right edge every time the app is shown
-    _scroller.setText(_message);
+    _scroller.restart();
 }
 
 void TextApp::render(IDisplay& display, const uint32_t nowMs) {

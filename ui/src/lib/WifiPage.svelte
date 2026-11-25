@@ -2,37 +2,42 @@
     import {apiRequest} from "$lib/api";
     import {busyStore} from "$lib/services/busy.svelte";
     import {ENDPOINTS} from "$lib/config";
+    import {byteLength} from "$lib/format";
     import type {WifiNetwork} from "$lib/interfaces";
     import PageHeader from "$lib/PageHeader.svelte";
     import ConfirmDialog from "$lib/ConfirmDialog.svelte";
     import Icon from "$lib/Icon.svelte";
+    import BackButton from "$lib/BackButton.svelte";
 
     // Picks a new network; onJoin runs once the user has confirmed the restart
-    let { current, onBack, onJoin }: {
+    let { current, address, onBack, onJoin }: {
         current: string,
+        // Where the controller answers, to reopen this page if it changes address
+        address: string,
         onBack: () => void,
         onJoin: (ssid: string, password: string) => void
     } = $props();
 
     let passwordInput = $state<HTMLInputElement>();
     let networks = $state<WifiNetwork[] | null>(null);
+    let scanError = $state<string | null>(null);
     let ssid = $state('');
     let password = $state('');
     let showPassword = $state(false);
     let confirming = $state(false);
 
-    // Same limits as WifiStore::isValid on the board, which counts bytes
-    const bytes = (text: string) => new TextEncoder().encode(text).length;
-    let ssidValid = $derived(bytes(ssid) >= 1 && bytes(ssid) <= 32);
-    let passwordValid = $derived(password.length === 0 || (bytes(password) >= 8 && bytes(password) <= 63));
+    // Same limits as WifiStore::isValid on the board
+    let ssidValid = $derived(byteLength(ssid) >= 1 && byteLength(ssid) <= 32);
+    let passwordValid = $derived(password.length === 0 || (byteLength(password) >= 8 && byteLength(password) <= 63));
 
     // The board scans in the background and answers with an empty list until the first scan is done
     $effect(() => {
         let timer: ReturnType<typeof setTimeout>;
         let stopped = false;
         const scan = async () => {
-            const response = await apiRequest<WifiNetwork[]>(ENDPOINTS.GET_WIFI_SCAN);
+            const response = await apiRequest<WifiNetwork[]>(ENDPOINTS.WIFI_SCAN);
             if (stopped) return;
+            scanError = response.error;
             if (response.data?.length) networks = response.data;
             // Keep the list fresh while the page stays open
             timer = setTimeout(scan, response.data?.length ? 10000 : 2000);
@@ -51,9 +56,7 @@
     }
 </script>
 
-<button type="button" class="pressable -ml-1.5 mb-3 flex items-center gap-0.5 rounded-md py-1 pr-2 text-[1.0625rem] text-primary" onclick={onBack}>
-    <Icon name="back" class="size-5" strokeWidth={2.5}/> Settings
-</button>
+<BackButton label="Settings" {onBack}/>
 
 <PageHeader title="Change WiFi" subtitle={current ? `Currently on ${current}` : undefined}/>
 
@@ -81,6 +84,8 @@
                         </span>
                     </button>
                 {/each}
+            {:else if scanError}
+                <div class="grouped-row text-error">Couldn't scan: {scanError}</div>
             {:else}
                 <div class="grouped-row text-base-content/55">Looking for networks...</div>
             {/if}
@@ -120,5 +125,5 @@
 </div>
 
 <ConfirmDialog bind:open={confirming} title="Join {ssid}?"
-               message="The controller restarts to join this network. If it gets a new address there, reopen this page at http://matrixcontroller.local."
+               message="The controller restarts to join this network. If it gets a new address there, reopen this page at {address}."
                confirmLabel="Restart" onConfirm={() => onJoin(ssid, password)}/>

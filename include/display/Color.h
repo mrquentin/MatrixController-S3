@@ -5,8 +5,7 @@
 
 #include <cstdint>
 
-/// 24-bit RGB color. The core display API keeps full 8 bits per channel;
-/// convert to RGB565 only at the edge (e.g. for an Adafruit_GFX adapter).
+/// 24-bit RGB color.
 struct Color {
     uint8_t r{};
     uint8_t g{};
@@ -26,10 +25,6 @@ struct Color {
         return (static_cast<uint32_t>(r) << 16) | (static_cast<uint32_t>(g) << 8) | b;
     }
 
-    [[nodiscard]] constexpr uint16_t toRgb565() const {
-        return static_cast<uint16_t>(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
-    }
-
     /// Scales every channel by factor / 255 (255 keeps the color, 0 gives black).
     [[nodiscard]] constexpr Color scaled(const uint8_t factor) const {
         return {scaleChannel(r, factor), scaleChannel(g, factor), scaleChannel(b, factor)};
@@ -37,10 +32,6 @@ struct Color {
 
     constexpr bool operator==(const Color& other) const {
         return r == other.r && g == other.g && b == other.b;
-    }
-
-    constexpr bool operator!=(const Color& other) const {
-        return !(*this == other);
     }
 
 private:
@@ -59,10 +50,12 @@ namespace Colors {
     constexpr Color Red{255, 0, 0};
     constexpr Color Green{0, 255, 0};
     constexpr Color Blue{0, 0, 255};
-    constexpr Color Yellow{255, 255, 0};
     constexpr Color Cyan{0, 255, 255};
-    constexpr Color Magenta{255, 0, 255};
     constexpr Color Orange{255, 128, 0};
+    /// Secondary text: labels, details
+    constexpr Color Gray{140, 140, 150};
+    /// Headings above the main value: place and meeting names
+    constexpr Color Silver{170, 170, 180};
 }
 
 #endif

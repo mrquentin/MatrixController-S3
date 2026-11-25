@@ -4,8 +4,7 @@
 #define _APP_h
 
 #include <cstdint>
-#include <ArduinoJson.h>
-#include "apps/ConfigSchema.h"
+#include "apps/AppSettings.h"
 #include "display/IDisplay.h"
 
 /// A small program that owns the matrix while it is the active app (clock, weather, F1...).
@@ -25,13 +24,9 @@ public:
     /// Name shown in the web UI.
     [[nodiscard]] virtual const char* name() const = 0;
 
-    /// Lists the settings shown in the web UI. Leave empty for an app without settings.
-    virtual void describeConfig(ConfigSchema& schema) const {}
-    /// Writes every current setting into config. This is what gets saved and shown in the UI.
-    virtual void getConfig(JsonObject config) const {}
-    /// Applies the settings present in config and keeps the others. Correct invalid values
-    /// (clamp, fall back) instead of failing: the UI shows the result from getConfig().
-    virtual void setConfig(JsonObjectConst config) {}
+    /// Declares the app's settings, see AppSettings. Called to describe, save and change them, so
+    /// react to a change by comparing with the values before. Leave empty for an app without settings.
+    virtual void settings(AppSettings& settings) {}
 
     /// Called when the app becomes the active one, and when it stops being active.
     virtual void activate() {}

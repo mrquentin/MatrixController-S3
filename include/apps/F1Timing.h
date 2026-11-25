@@ -62,7 +62,7 @@ namespace F1 {
     };
 
     /// GraphQL query for the next poll. last is the previous answer (nullptr if none): its session
-    /// type and flag decide which of the large topics are worth fetching.
+    /// session type decides which of the large topics are worth fetching.
     std::string buildQuery(const LiveState* last);
 
     /// Filter for the GraphQL response that keeps only what parseLiveState reads, so large topics
@@ -87,12 +87,6 @@ namespace F1 {
     /// Applies one race control message to the pit lane state, if it opens or closes the pit entry
     /// or exit. Announcements like "PIT EXIT WILL OPEN AT 15:10" change nothing.
     void applyPitMessage(const char* message, LiveState& state);
-
-    /// True for sessions that report a qualifying part (Q1-Q3 / SQ1-SQ3).
-    bool isQualifying(SessionKind kind);
-
-    /// True for sessions that show the top drivers, which needs TimingData and DriverList.
-    bool showsTopDrivers(SessionKind kind);
 
     SessionKind sessionKind(const char* type, const char* name);
 

@@ -133,6 +133,23 @@ void test_query_always_has_messages() {
     TEST_ASSERT_NOT_EQUAL(std::string::npos, F1::buildQuery(&state).find("RaceControlMessages"));
 }
 
+void test_query_fetches_timing_only_for_sessions_that_show_it() {
+    const auto asks = [](const F1::SessionKind kind, const char* topic) {
+        F1::LiveState state;
+        state.kind = kind;
+        return F1::buildQuery(&state).find(topic) != std::string::npos;
+    };
+    // Qualifying needs TimingData for the part (Q1-Q3), and both need the top drivers
+    for (const auto kind : {F1::SessionKind::Practice, F1::SessionKind::Qualifying, F1::SessionKind::SprintQualifying}) {
+        TEST_ASSERT_TRUE(asks(kind, "TimingData"));
+        TEST_ASSERT_TRUE(asks(kind, "DriverList"));
+    }
+    // Races only show the lap count; TimingData is large
+    TEST_ASSERT_FALSE(asks(F1::SessionKind::Race, "TimingData"));
+    TEST_ASSERT_FALSE(asks(F1::SessionKind::Sprint, "DriverList"));
+    TEST_ASSERT_EQUAL(std::string::npos, F1::buildQuery(nullptr).find("TimingData"));
+}
+
 void test_remaining_time() {
     F1::LiveState state;
     TEST_ASSERT_EQUAL_INT64(-1, F1::remainingMs(state, 0));
@@ -172,6 +189,7 @@ int main() {
     RUN_TEST(test_pit_lane);
     RUN_TEST(test_parse_pit_messages);
     RUN_TEST(test_query_always_has_messages);
+    RUN_TEST(test_query_fetches_timing_only_for_sessions_that_show_it);
     RUN_TEST(test_remaining_time);
     RUN_TEST(test_short_meeting_name);
     return UNITY_END();

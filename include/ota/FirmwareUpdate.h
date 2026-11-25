@@ -34,10 +34,15 @@ class FirmwareUpdate {
 public:
     enum class State : uint8_t { Idle, Running, Installed, Failed };
 
-    /// Starts an update of size bytes (0 if unknown). Returns its attempt number, which the
-    /// calls below take so that a caller only ever affects its own update; 0 if another update
-    /// runs. When the image can't fit, the update has already failed (see isRunning()).
-    uint32_t begin(UpdateSource source, size_t size);
+    struct Start {
+        /// Passed to the calls below, so that a caller only ever affects its own update. 0 if refused.
+        uint32_t attempt;
+        /// Why it was refused, nullptr when it started
+        const char* refusal;
+    };
+
+    /// Starts an update of size bytes (0 if unknown), unless another one runs or it can't fit.
+    Start begin(UpdateSource source, size_t size);
     /// Writes the next part of the image. Returns false, and fails the update, on errors.
     bool write(uint32_t attempt, const uint8_t* data, size_t length);
     /// Checks the complete image and makes it the one to boot. Returns false if it's incomplete
@@ -54,7 +59,6 @@ public:
 
     [[nodiscard]] bool isRunning(uint32_t attempt) const { return _state == State::Running && _attempt == attempt; }
     [[nodiscard]] State state() const { return _state; }
-    [[nodiscard]] UpdateSource source() const { return _source; }
     [[nodiscard]] bool replacesFiles() const { return _files; }
     [[nodiscard]] size_t written() const { return _written; }
     /// 0 when unknown
@@ -67,19 +71,14 @@ public:
     /// Accepts the running firmware once it has served the web UI (or the setup portal) for a
     /// while, ending its probation after an update. upForMs is how long it has. Call from loop().
     static void confirmWhenHealthy(uint32_t upForMs);
-    /// True while the running firmware is on probation after an update.
-    [[nodiscard]] static bool onProbation();
-    /// True if the last update didn't come up properly and the board went back to this firmware.
-    [[nodiscard]] static bool rolledBack();
     [[nodiscard]] static const char* version();
-    /// Label of the app slot running now ("ota_0" or "ota_1").
-    [[nodiscard]] static const char* runningSlot();
 
     /// Fills in the update state for the web UI.
     void describe(JsonObject out) const;
 
 private:
     void fail(const char* reason);
+    void installed();
     bool startWriting();
 
     // The start of an image is held back until it can be checked: the image header, the first

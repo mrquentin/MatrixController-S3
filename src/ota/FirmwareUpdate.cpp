@@ -8,10 +8,7 @@
 #include <esp_ota_ops.h>
 
 #include "FirmwareVersion.h"
-
-#define DEBUG true  //set to true for debug output, false for no debug output
-#define DEBUG_PRINT if(DEBUG)Serial
-#define DEBUG_PRINTF if(DEBUG)printf
+#include "Log.h"
 
 // The core accepts new firmware as soon as it boots unless this says otherwise; returning true
 // leaves that to FirmwareUpdate::confirmWhenHealthy()
@@ -41,9 +38,28 @@ namespace {
         return nullptr;
     }
 
+    /// True while the running firmware is on probation after an update.
+    bool onProbation() {
+        esp_ota_img_states_t state;
+        return esp_ota_get_state_partition(esp_ota_get_running_partition(), &state) == ESP_OK
+            && state == ESP_OTA_IMG_PENDING_VERIFY;
+    }
+
+    /// True if the last update didn't come up properly and the board went back to this firmware.
+    bool rolledBack() {
+        // The slot the failed update went into stays marked invalid until the next update replaces it
+        return esp_ota_get_last_invalid_partition() != nullptr;
+    }
+
+    /// Label of the app slot running now ("ota_0" or "ota_1").
+    const char* runningSlot() {
+        const esp_partition_t* running = esp_ota_get_running_partition();
+        return running ? running->label : "";
+    }
+
     void accept() {
-        if (FirmwareUpdate::onProbation() && esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
-            DEBUG_PRINT.println("Update: running firmware accepted");
+        if (onProbation() && esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+            LOGF("Update: running firmware accepted\n");
         }
     }
 
@@ -82,7 +98,7 @@ uint32_t FirmwareUpdate::claim(const UpdateSource source, const size_t size, con
     uint32_t attempt = _attempt + 1;
     if (attempt == 0) attempt = 1;
     _attempt = attempt;
-    DEBUG_PRINTF("Update: %s started, %u bytes\n", sourceName(source), static_cast<unsigned>(size));
+    LOGF("Update: %s started, %u bytes\n", sourceName(source), static_cast<unsigned>(size));
 
     // Receiving an update shows this firmware works. Accepting it now also means a rollback
     // after the new one can't land on firmware that was never confirmed
@@ -90,18 +106,15 @@ uint32_t FirmwareUpdate::claim(const UpdateSource source, const size_t size, con
     return attempt;
 }
 
-uint32_t FirmwareUpdate::begin(const UpdateSource source, const size_t size) {
-    const uint32_t attempt = claim(source, size, false);
-    if (attempt == 0) return 0;
-    _headLength = 0;
-
+FirmwareUpdate::Start FirmwareUpdate::begin(const UpdateSource source, const size_t size) {
     const esp_partition_t* slot = esp_ota_get_next_update_partition(nullptr);
-    if (!slot) {
-        fail("No app slot to install into");
-    } else if (size > slot->size) {
-        fail("Too large for the app slot");
-    }
-    return attempt;
+    if (!slot) return {0, "No app slot to install into"};
+    if (size > slot->size) return {0, "Too large for the app slot"};
+
+    const uint32_t attempt = claim(source, size, false);
+    if (attempt == 0) return {0, "Another update is running"};
+    _headLength = 0;
+    return {attempt, nullptr};
 }
 
 bool FirmwareUpdate::startWriting() {
@@ -159,8 +172,7 @@ bool FirmwareUpdate::finish(const uint32_t attempt) {
         fail(Update.errorString());
         return false;
     }
-    DEBUG_PRINT.println("Update: installed, boots after the restart");
-    _state = State::Installed;
+    installed();
     return true;
 }
 
@@ -178,7 +190,11 @@ void FirmwareUpdate::complete(const uint32_t attempt, const bool succeeded, cons
         fail(error ? error : "Update failed");
         return;
     }
-    DEBUG_PRINT.println("Update: installed, boots after the restart");
+    installed();
+}
+
+void FirmwareUpdate::installed() {
+    LOGF("Update: installed, boots after the restart\n");
     _state = State::Installed;
 }
 
@@ -187,7 +203,7 @@ void FirmwareUpdate::fail(const char* reason) {
     // our own writes
     if (Update.isRunning()) Update.abort();
     strlcpy(_error, reason, sizeof(_error));
-    DEBUG_PRINTF("Update: failed, %s\n", reason);
+    LOGF("Update: failed, %s\n", reason);
     _state = State::Failed;
 }
 
@@ -199,31 +215,18 @@ void FirmwareUpdate::confirmWhenHealthy(const uint32_t upForMs) {
     accept();
 }
 
-bool FirmwareUpdate::onProbation() {
-    esp_ota_img_states_t state;
-    return esp_ota_get_state_partition(esp_ota_get_running_partition(), &state) == ESP_OK
-        && state == ESP_OTA_IMG_PENDING_VERIFY;
-}
-
-bool FirmwareUpdate::rolledBack() {
-    // The slot the failed update went into stays marked invalid until the next update replaces it
-    return esp_ota_get_last_invalid_partition() != nullptr;
-}
-
 const char* FirmwareUpdate::version() {
     return FIRMWARE_VERSION;
-}
-
-const char* FirmwareUpdate::runningSlot() {
-    const esp_partition_t* running = esp_ota_get_running_partition();
-    return running ? running->label : "";
 }
 
 void FirmwareUpdate::describe(const JsonObject out) const {
     out["version"] = version();
     out["slot"] = runningSlot();
     out["onProbation"] = onProbation();
+    out["probationSeconds"] = HealthyAfterMs / 1000;
     out["rolledBack"] = rolledBack();
+    const esp_partition_t* slot = esp_ota_get_next_update_partition(nullptr);
+    out["maxSize"] = slot ? slot->size : 0;
 
     const State state = _state;
     out["state"] = stateName(state);

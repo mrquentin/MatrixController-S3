@@ -26,7 +26,7 @@ describe('apiRequest', () => {
     it('returns the parsed answer', async () => {
         vi.stubGlobal('fetch', respond(200, { ssid: 'Home' }));
         expect(await apiRequest<{ ssid: string }>('/api/system/wifi')).toEqual({
-            data: { ssid: 'Home' }, error: null, loading: false
+            data: { ssid: 'Home' }, error: null
         });
     });
 
@@ -45,7 +45,7 @@ describe('apiRequest', () => {
     it('reports the board\'s error details', async () => {
         vi.stubGlobal('fetch', respond(429, { result: 'error', details: 'Too many wrong passwords' }));
         expect(await apiRequest('/api/system/update/verify', 'POST')).toEqual({
-            data: null, error: 'Too many wrong passwords', loading: false
+            data: null, error: 'Too many wrong passwords'
         });
     });
 

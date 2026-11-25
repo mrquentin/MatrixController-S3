@@ -6,7 +6,7 @@
     import {ENDPOINTS} from "$lib/config";
     import {busyStore} from "$lib/services/busy.svelte";
     import {apiRequest, type ApiResponse} from "$lib/api";
-    import type {SystemConfig} from "$lib/interfaces";
+    import type {ConfigState} from "$lib/interfaces";
     import {FADE_MS, SPRING_DEFAULT} from "$lib/motion";
     import Icon, {type IconName} from "$lib/Icon.svelte";
     import Apps from "$lib/Apps.svelte";
@@ -22,7 +22,7 @@
     // Sidebar rows are h-9 with a 2px gap; the selection pill springs between them
     const ROW_PITCH = 38;
 
-    let config = $state<ApiResponse<SystemConfig>>({ data: null, error: null, loading: false });
+    let config = $state<ApiResponse<ConfigState>>({ data: null, error: null });
     let activeTab = $state('apps');
     let scrolled = $state(false);
 
@@ -47,7 +47,7 @@
 
     async function loadConfig() {
         await busyStore.run(async () => {
-           config = await apiRequest<SystemConfig>(ENDPOINTS.GET_SYSTEM_CONFIG);
+           config = await apiRequest<ConfigState>(ENDPOINTS.SYSTEM_CONFIG);
         });
     }
 </script>
@@ -108,7 +108,6 @@
         {/key}
     </main>
 
-    <!-- Mobile tab bar -->
     <nav aria-label="Main" class="material fixed inset-x-0 bottom-0 z-20 border-t border-base-content/10 pb-[env(safe-area-inset-bottom)] lg:hidden">
         <ul class="mx-auto grid max-w-md grid-cols-3">
             {#each TABS as tab}
