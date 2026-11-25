@@ -32,7 +32,6 @@ public:
 private:
     static void entry(void* self);
     [[noreturn]] void run();
-    void wake();
 
     const char* _name;
     uint32_t _stackSize;

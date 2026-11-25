@@ -1,38 +1,45 @@
 #pragma once
 
-#include <functional>
-#include <string>
-#include <LittleFS.h>
-#include <ArduinoJson.h>
-#include "display/DisplayConfig.h"
-
 #ifndef _CONFIG_h
 #define _CONFIG_h
 
-#define MDNSName "matrixcontroller"
+#include <atomic>
+#include <mutex>
+#include <string>
+#include <ArduinoJson.h>
+#include "display/DisplayConfig.h"
 
+struct SystemSettings {
+    bool debug = true;
+    DisplayConfig display;
+    /// POSIX TZ string, e.g. "CET-1CEST,M3.5.0,M10.5.0/3"
+    std::string timezone = "UTC0";
+};
+
+/// The system settings, kept in a JSON file on LittleFS. Values that are missing or out of range
+/// get their default, so what get() returns is always usable. Safe to use from any task.
 class Config {
-    public:
-        using SavedCallback = std::function<void(const Config&)>;
+public:
+    explicit Config(const char* filePath);
 
-        explicit Config(std::string_view filePath);
-        void load();
-        void save(const uint8_t *data, size_t len, size_t index, size_t total);
-        [[nodiscard]] std::string_view getFilePath() const;
-        [[nodiscard]] bool isDebug() const;
-        [[nodiscard]] const DisplayConfig& getDisplayConfig() const;
-        /// POSIX TZ string, e.g. "CET-1CEST,M3.5.0,M10.5.0/3". Used for local time on the board.
-        [[nodiscard]] const std::string& getTimezone() const;
-        /// Called after a config uploaded by save() has been reloaded. Runs on the web server task.
-        void onSaved(SavedCallback callback);
-    private:
-        static DisplayConfig parseDisplayConfig(JsonObjectConst json);
+    void load();
+    /// Replaces the settings with the ones in json and saves them. Returns false if they couldn't
+    /// be saved; they apply until the next restart anyway.
+    bool update(JsonObjectConst json);
+    [[nodiscard]] SystemSettings get() const;
+    /// Changes with every update(), so the loop can tell when to apply the settings.
+    [[nodiscard]] uint32_t revision() const { return _revision; }
 
-        bool Debug{};
-        DisplayConfig Display;
-        std::string Timezone = "UTC0";
-        std::string_view FilePath;
-        SavedCallback OnSaved;
+    /// Writes {config, limits} for the web UI: the settings, and the ranges it may pick from.
+    void describe(JsonObject out) const;
+
+private:
+    void set(JsonObjectConst json);
+
+    const char* _filePath;
+    mutable std::mutex _mutex;
+    SystemSettings _settings;
+    std::atomic<uint32_t> _revision{0};
 };
 
 #endif

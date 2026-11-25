@@ -13,8 +13,10 @@
 /// has fully left the screen. Speed is time based, so it doesn't depend on the frame rate.
 class ScrollingText {
 public:
-    /// Replaces the text and restarts from the right edge.
+    /// Replaces the text, restarting from the right edge if it differs.
     void setText(std::string_view text);
+    /// Starts over from the right edge.
+    void restart();
     void setColor(Color color);
     void setY(int32_t y);
     void setSpeed(float pixelsPerSecond);

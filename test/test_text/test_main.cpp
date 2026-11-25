@@ -54,8 +54,28 @@ void test_shapes_clip_and_hit_their_ends() {
     TEST_ASSERT_EQUAL(0, display.outOfBounds);
 }
 
+void test_lines_skip_empty_ones_and_fit_the_width() {
+    FakeDisplay one(64, 32);
+    FakeDisplay withEmpty(64, 32);
+    drawLines(one, {{"Hi", Colors::White}});
+    drawLines(withEmpty, {{"", Colors::Red}, {"Hi", Colors::White}, {"", Colors::Red}});
+    TEST_ASSERT_TRUE(one.litPixels() > 0);
+    for (int16_t y = 0; y < 32; ++y) {
+        for (int16_t x = 0; x < 64; ++x) TEST_ASSERT_TRUE(one.at(x, y) == withEmpty.at(x, y));
+    }
+
+    // 10 characters fit 64 px; a longer line keeps its start, cut to those
+    FakeDisplay cut(64, 32);
+    FakeDisplay fitting(64, 32);
+    drawLines(cut, {{"ABCDEFGHIJKLMNOP", Colors::White}});
+    drawLines(fitting, {{"ABCDEFGHIJ", Colors::White}});
+    TEST_ASSERT_EQUAL(0, cut.outOfBounds);
+    TEST_ASSERT_EQUAL(fitting.litPixels(), cut.litPixels());
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_lines_skip_empty_ones_and_fit_the_width);
     RUN_TEST(test_text_size);
     RUN_TEST(test_draw_text_returns_next_position);
     RUN_TEST(test_draw_text_clips_to_the_display);

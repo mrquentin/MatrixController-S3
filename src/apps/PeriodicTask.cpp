@@ -19,7 +19,7 @@ void PeriodicTask::setEnabled(const bool enabled) {
         xTaskCreatePinnedToCore(entry, _name, _stackSize, this, TaskPriority, &_handle, TaskCore);
         return;  // a new task starts with a run
     }
-    wake();
+    runNow();
 }
 
 void PeriodicTask::setInterval(const uint32_t intervalMs) {
@@ -27,10 +27,6 @@ void PeriodicTask::setInterval(const uint32_t intervalMs) {
 }
 
 void PeriodicTask::runNow() {
-    wake();
-}
-
-void PeriodicTask::wake() {
     if (_handle) xTaskNotifyGive(_handle);
 }
 
@@ -42,7 +38,6 @@ void PeriodicTask::run() {
     for (;;) {
         if (_enabled) _job();
 
-        // Sleep until the interval is up, or until woken by runNow()/setEnabled(); paused while disabled
         const TickType_t wait = _enabled ? pdMS_TO_TICKS(_intervalMs.load()) : portMAX_DELAY;
         ulTaskNotifyTake(pdTRUE, wait);
     }

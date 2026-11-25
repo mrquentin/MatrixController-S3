@@ -1,10 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include "sensors/Accelerometer.h"
-
-#define DEBUG true  //set to true for debug output, false for no debug output
-#define DEBUG_PRINT if(DEBUG)Serial
-#define DEBUG_PRINTF if(DEBUG)printf
+#include "Log.h"
 
 namespace {
     // The MatrixPortal S3 tested here answers at 0x29 (WHO_AM_I 0x33 and the LIS3DH's registers), not at
@@ -57,11 +54,11 @@ bool Accelerometer::begin() {
         uint8_t id = 0;
         if (!readRegisters(address, RegWhoAmI, &id, 1)) continue;
         if (id != WhoAmIValue) {
-            DEBUG_PRINTF("I2C device at 0x%02X is not a LIS3DH (id 0x%02X)\n", address, id);
+            LOGF("I2C device at 0x%02X is not a LIS3DH (id 0x%02X)\n", address, id);
             continue;
         }
         if (!writeRegister(address, RegCtrl1, Ctrl1Value) || !writeRegister(address, RegCtrl4, Ctrl4Value)) {
-            DEBUG_PRINTF("LIS3DH at 0x%02X did not accept its settings\n", address);
+            LOGF("LIS3DH at 0x%02X did not accept its settings\n", address);
             continue;
         }
         _address = address;
@@ -73,20 +70,20 @@ bool Accelerometer::begin() {
             if (readRegisters(address, RegStatus, &status, 1) && (status & XyzReady)) break;
             delay(5);
         }
-        DEBUG_PRINTF("LIS3DH accelerometer found at 0x%02X\n", address);
+        LOGF("LIS3DH accelerometer found at 0x%02X\n", address);
         return true;
     }
 
     // Lists what is on the bus instead, to tell a missing chip from a different one or a dead bus
-    DEBUG_PRINT.print("No LIS3DH accelerometer found. I2C devices:");
+    LOGF("No LIS3DH accelerometer found. I2C devices:");
     bool any = false;
     for (uint8_t address = 1; address < 0x7F; ++address) {
         Wire.beginTransmission(address);
         if (Wire.endTransmission() != 0) continue;
-        DEBUG_PRINTF(" 0x%02X", address);
+        LOGF(" 0x%02X", address);
         any = true;
     }
-    DEBUG_PRINT.println(any ? "" : " none");
+    LOGF("%s\n", any ? "" : " none");
     return false;
 }
 

@@ -1,16 +1,14 @@
 #include "net/CaptivePortal.h"
 
 #include <WiFi.h>
-#include <ArduinoJson.h>
-#include "net/WifiScan.h"
+#include "net/WifiRoutes.h"
 #include "net/WifiStore.h"
-
-#define DEBUG true  //set to true for debug output, false for no debug output
-#define DEBUG_PRINT if(DEBUG)Serial
-#define DEBUG_PRINTF if(DEBUG)printf
+#include "Log.h"
 
 namespace {
     constexpr uint16_t DnsPort = 53;
+    // Long enough for the answer to reach the phone before the network goes away
+    constexpr uint32_t RestartDelayMs = 2500;
 
     // Plain page with no external assets: there is no internet on the setup network, and
     // captive portal browsers are limited
@@ -38,7 +36,7 @@ input{width:100%;font:inherit;padding:10px 0;border:0;border-bottom:1px solid #e
 </div><button class="save">Save and restart</button></form>
 </main><script>
 function esc(s){return s.replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
-function scan(){fetch('/scan').then(function(r){return r.json()}).then(function(list){
+function scan(){fetch('/api/system/wifi/scan').then(function(r){return r.json()}).then(function(list){
 if(!list.length){setTimeout(scan,2000);return}
 document.getElementById('nets').innerHTML=list.map(function(n){return '<button type="button" data-ssid="'+esc(n.ssid)+'"><span>'+esc(n.ssid)+'</span><span class="muted">'+(n.secure?'&#128274; ':'')+n.quality+'%</span></button>'}).join('');
 document.querySelectorAll('#nets button').forEach(function(b){b.onclick=function(){document.getElementById('ssid').value=b.dataset.ssid;document.getElementById('password').focus()}})
@@ -69,13 +67,13 @@ scan();
     }
 }
 
-CaptivePortal::CaptivePortal(AsyncWebServer& server) : _server(server) {}
+CaptivePortal::CaptivePortal(AsyncWebServer& server, SystemManager& system) : _server(server), _system(system) {}
 
 void CaptivePortal::begin(const std::string& ssid, const std::string& password) {
     // AP + station: the station side is only used to scan for networks to offer
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(ssid.c_str(), password.c_str());
-    DEBUG_PRINTF("Setup network \"%s\" started at %s\n", ssid.c_str(), WiFi.softAPIP().toString().c_str());
+    LOGF("Setup network \"%s\" started at %s\n", ssid.c_str(), WiFi.softAPIP().toString().c_str());
 
     _dns.setErrorReplyCode(DNSReplyCode::NoError);
     _dns.start(DnsPort, "*", WiFi.softAPIP());
@@ -99,14 +97,7 @@ void CaptivePortal::addRoutes() {
         request->send(200, "text/html", PortalPage);
     });
 
-    _server.on("/scan", HTTP_GET, [](AsyncWebServerRequest* request) {
-        JsonDocument doc;
-        WifiScan::listNetworks(doc.to<JsonArray>());
-
-        String response;
-        serializeJson(doc, response);
-        request->send(200, "application/json", response);
-    });
+    addWifiScanRoute(_server);
 
     _server.on("/save", HTTP_POST, [this](AsyncWebServerRequest* request) {
         const AsyncWebParameter* ssidParam = request->getParam("ssid", true);
@@ -117,18 +108,16 @@ void CaptivePortal::addRoutes() {
 
         if (!WifiStore::isValid(credentials)) {
             request->send(400, "text/html", messagePage("Check the details",
-                "The network name must be 1 to 32 characters, and the password empty or 8 to 63 characters. "
-                "<a href=\"/\">Try again</a>"));
+                String(WifiStore::ValidityRule) + ". <a href=\"/\">Try again</a>"));
             return;
         }
 
         WifiStore::save(credentials);
-        DEBUG_PRINTF("WiFi credentials saved for \"%s\"\n", credentials.ssid.c_str());
+        LOGF("WiFi credentials saved for \"%s\"\n", credentials.ssid.c_str());
         request->send(200, "text/html", messagePage("Saved",
             "The Matrix Controller restarts and joins <b>" + escapeHtml(credentials.ssid.c_str()) +
             "</b>. This setup network will disappear; you can reconnect your phone to your usual WiFi."));
-        // The restart happens in loop(), after this response has gone out
-        _saved = true;
+        _system.scheduleRestart(credentials.ssid, RestartDelayMs);
     });
 
     // Every other address (including the phones' "is there internet?" checks) leads to the portal,

@@ -18,9 +18,7 @@ public:
     [[nodiscard]] const char* id() const override { return "weather"; }
     [[nodiscard]] const char* name() const override { return "Weather"; }
 
-    void describeConfig(ConfigSchema& schema) const override;
-    void getConfig(JsonObject config) const override;
-    void setConfig(JsonObjectConst config) override;
+    void settings(AppSettings& settings) override;
 
     void activate() override;
     void deactivate() override;
@@ -33,8 +31,14 @@ private:
     struct Settings {
         std::string city;
         std::string country;  // optional ISO 3166-1 alpha-2 code to pick the right city
-        bool fahrenheit = false;
+        std::string units = "celsius";
         int32_t refreshMinutes = 15;
+
+        [[nodiscard]] bool fahrenheit() const { return units == "fahrenheit"; }
+        /// Same place and units, so the weather already shown still applies
+        [[nodiscard]] bool sameData(const Settings& other) const {
+            return city == other.city && country == other.country && units == other.units;
+        }
     };
 
     struct Location {

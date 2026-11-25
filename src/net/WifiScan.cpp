@@ -3,15 +3,13 @@
 #include <WiFi.h>
 #include <set>
 
-namespace {
+namespace WifiScan {
     int qualityFromRssi(const int32_t rssi) {
         if (rssi <= -100) return 0;
         if (rssi >= -50) return 100;
         return 2 * (rssi + 100);
     }
-}
 
-namespace WifiScan {
     void listNetworks(JsonArray list) {
         const int16_t count = WiFi.scanComplete();
         if (count == WIFI_SCAN_FAILED) {

@@ -1,52 +1,23 @@
-import type {DisplayConfig} from "$lib/interfaces";
-
-const IS_DEV = import.meta.env.DEV;
-
-export const BASE_URL = IS_DEV ? '' : '';
-
 export const ENDPOINTS = {
-    GET_SYSTEM_STATUS:  `${BASE_URL}/api/system/status`,
-    GET_SYSTEM_CONFIG: `${BASE_URL}/api/system/config`,
-    POST_SYSTEM_CONFIG: `${BASE_URL}/api/system/config`,
-    GET_WIFI:           `${BASE_URL}/api/system/wifi`,
-    POST_WIFI:          `${BASE_URL}/api/system/wifi`,
-    GET_WIFI_SCAN:      `${BASE_URL}/api/system/wifi/scan`,
-    POST_WIFI_FORGET:   `${BASE_URL}/api/system/wifi/forget`,
-    POST_RESTART:       `${BASE_URL}/api/system/restart`,
-    GET_UPDATE:         `${BASE_URL}/api/system/update`,
-    POST_UPDATE:        `${BASE_URL}/api/system/update`,
-    POST_UPDATE_VERIFY: `${BASE_URL}/api/system/update/verify`,
-    POST_UPDATE_PASSWORD: `${BASE_URL}/api/system/update/password`,
-    POST_RELEASE_CHECK: `${BASE_URL}/api/system/update/release/check`,
-    POST_RELEASE_INSTALL: `${BASE_URL}/api/system/update/release/install`,
-    GET_APPS:          `${BASE_URL}/api/apps`,
-    POST_APP_ACTIVE:    `${BASE_URL}/api/apps/active`,
-    POST_APP_CONFIG:    `${BASE_URL}/api/apps/config`,
-    WEB_SOCKET:         `${BASE_URL}/ws`
+    SYSTEM_STATUS:    '/api/system/status',
+    SYSTEM_CONFIG:    '/api/system/config',
+    WIFI:             '/api/system/wifi',
+    WIFI_SCAN:        '/api/system/wifi/scan',
+    WIFI_FORGET:      '/api/system/wifi/forget',
+    RESTART:          '/api/system/restart',
+    UPDATE:           '/api/system/update',
+    UPDATE_VERIFY:    '/api/system/update/verify',
+    UPDATE_PASSWORD:  '/api/system/update/password',
+    RELEASE_CHECK:    '/api/system/update/release/check',
+    RELEASE_INSTALL:  '/api/system/update/release/install',
+    APPS:             '/api/apps',
+    APP_ACTIVE:       '/api/apps/active',
+    APP_CONFIG:       '/api/apps/config',
+    WEB_SOCKET:       '/ws',
 }
 
 // Requests that update the firmware carry the update password in this header
 export const UPDATE_PASSWORD_HEADER = 'X-Update-Password';
-
-// Same limits as UpdatePassword::isValid on the board
-export const UPDATE_PASSWORD_MIN = 8;
-export const UPDATE_PASSWORD_MAX = 64;
-
-// Mirrors the firmware defaults in include/display/DisplayConfig.h
-export const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
-    width: 128,
-    height: 64,
-    brightness: 128,
-    doubleBuffer: true,
-    orientation: 'auto'
-}
-
-// Mirrors MaxBrightness in include/display/DisplayConfig.h
-export const MAX_BRIGHTNESS = 128;
-
-export const DISPLAY_HEIGHTS = [16, 32, 64];
-
-export const DEFAULT_TIMEZONE = 'UTC0';
 
 // The board needs POSIX TZ strings, which include the daylight saving rules
 export const TIMEZONES = [
@@ -61,3 +32,5 @@ export const TIMEZONES = [
     {label: 'Tokyo (JST)', value: 'JST-9'},
     {label: 'Sydney (AEST/AEDT)', value: 'AEST-10AEDT,M10.1.0,M4.1.0/3'},
 ];
+
+export const ORIENTATION_LABELS = { auto: 'Auto', upright: 'Upright', upsideDown: 'Flipped' } as const;

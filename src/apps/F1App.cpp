@@ -1,9 +1,9 @@
 #include "apps/F1App.h"
 
 #include <Arduino.h>
-#include <sys/time.h>
 #include <cstdio>
 #include <cstring>
+#include "SystemClock.h"
 #include "display/Shapes.h"
 #include "display/Text.h"
 #include "net/HttpJson.h"
@@ -25,9 +25,6 @@ namespace {
     // With both a flag band and a pit lane closure, the band switches between them this often
     constexpr uint32_t BandAlternateMs = 3000;
 
-    constexpr Color MeetingColor{170, 170, 180};
-    constexpr Color LabelColor{140, 140, 150};
-    constexpr Color MessageDetailColor{140, 140, 150};
     constexpr Color PitLightColor{230, 0, 0};
 
     constexpr int32_t BandHeight = 14;
@@ -55,33 +52,19 @@ namespace {
         return {"", {"", ""}, Colors::Black, Colors::Black};
     }
 
-    int32_t centeredX(const IDisplay& display, const int32_t width) {
-        return (static_cast<int32_t>(display.width()) - width) / 2;
+    void drawMessage(IDisplay& display, const std::string_view first, const std::string_view second,
+                     const std::string_view third) {
+        drawLines(display, {{first, Colors::White}, {second, Colors::Gray}, {third, Colors::Gray}});
     }
 
-    void drawCenteredLine(IDisplay& display, const int32_t y, const char* text, const Color color,
-                          const uint8_t scale = 1) {
-        drawText(display, centeredX(display, textWidth(text, Fonts::Font5x7, scale)), y, text, color,
-                 Fonts::Font5x7, scale);
-    }
-
-    void drawRightAligned(IDisplay& display, const int32_t right, const int32_t y, const char* text,
-                          const Color color, const uint8_t scale = 1) {
-        drawText(display, right - textWidth(text, Fonts::Font5x7, scale), y, text, color, Fonts::Font5x7, scale);
-    }
-
-    void drawMessage(IDisplay& display, const char* first, const char* second, const char* third = nullptr) {
-        const char* lines[] = {first, second, third};
-        int32_t count = 0;
-        for (const char* line : lines) count += line != nullptr;
-
-        const int32_t lineHeight = textHeight() + 3;
-        int32_t y = (static_cast<int32_t>(display.height()) - count * lineHeight + 3) / 2;
-        for (int32_t i = 0; i < 3; ++i) {
-            if (!lines[i]) continue;
-            drawCenteredLine(display, y, lines[i], i == 0 ? Colors::White : MessageDetailColor);
-            y += lineHeight;
-        }
+    /// Accepts a pasted URL like "http://192.168.1.20:10101/" and keeps only the host.
+    std::string hostOf(const std::string_view text) {
+        std::string host(text);
+        const auto scheme = host.find("://");
+        if (scheme != std::string::npos) host.erase(0, scheme + 3);
+        const auto end = host.find_first_of(":/ ");
+        if (end != std::string::npos) host.erase(end);
+        return host;
     }
 
     void drawCheckerboard(IDisplay& display, const int16_t top, const int16_t height, const int16_t square) {
@@ -100,17 +83,16 @@ namespace {
         const int32_t textY = top + (BandHeight - textHeight()) / 2;
 
         if (flag == F1::Flag::Chequered) {
-            // Checkerboard with the text on a black plate in the middle
             drawCheckerboard(display, top, BandHeight, 4);
             const int32_t plateWidth = textWidth(style.band) + 6;
-            display.fillRect(static_cast<int16_t>(centeredX(display, plateWidth)), static_cast<int16_t>(top + 2),
+            display.fillRect(static_cast<int16_t>((display.width() - plateWidth) / 2), static_cast<int16_t>(top + 2),
                              static_cast<int16_t>(plateWidth), BandHeight - 4, Colors::Black);
-            drawCenteredLine(display, textY, style.band, Colors::White);
+            drawTextCentered(display, textY, style.band, Colors::White);
             return;
         }
 
         display.fillRect(0, top, static_cast<int16_t>(display.width()), BandHeight, style.background);
-        drawCenteredLine(display, textY, style.band, style.foreground);
+        drawTextCentered(display, textY, style.band, style.foreground);
     }
 
     /// Black band with the red pit exit light on the left, so it can't be mistaken for a red flag.
@@ -123,7 +105,7 @@ namespace {
         display.fillRect(0, top, static_cast<int16_t>(display.width()), 1, PitLightColor);
         const int32_t middle = top + 1 + (BandHeight - 1) / 2;
         fillCircle(display, 7, middle, 3, PitLightColor);
-        drawCenteredLine(display, middle - textHeight() / 2, text, Colors::White);
+        drawTextCentered(display, middle - textHeight() / 2, text, Colors::White);
     }
 
     /// True for flags announced full screen before moving to the band.
@@ -138,26 +120,15 @@ namespace {
         display.fill(style.background);
 
         if (style.lines[1][0] == '\0') {
-            drawCenteredLine(display, (height - textHeight(Fonts::Font5x7, 3)) / 2, style.lines[0], style.foreground, 3);
+            drawTextCentered(display, (height - textHeight(Fonts::Font5x7, 3)) / 2, style.lines[0], style.foreground, Fonts::Font5x7, 3);
             return;
         }
 
         const int32_t lineHeight = textHeight(Fonts::Font5x7, 2);
         constexpr int32_t Gap = 5;
         const int32_t top = (height - 2 * lineHeight - Gap) / 2;
-        drawCenteredLine(display, top, style.lines[0], style.foreground, 2);
-        drawCenteredLine(display, top + lineHeight + Gap, style.lines[1], style.foreground, 2);
-    }
-}
-
-namespace {
-    /// Current time in ms since the epoch, or 0 before the first NTP sync (the clock starts at 1970).
-    int64_t currentEpochMs() {
-        timeval tv{};
-        gettimeofday(&tv, nullptr);
-        constexpr time_t FirstValidSecond = 1704067200;  // 2024-01-01
-        if (tv.tv_sec < FirstValidSecond) return 0;
-        return static_cast<int64_t>(tv.tv_sec) * 1000 + tv.tv_usec / 1000;
+        drawTextCentered(display, top, style.lines[0], style.foreground, Fonts::Font5x7, 2);
+        drawTextCentered(display, top + lineHeight + Gap, style.lines[1], style.foreground, Fonts::Font5x7, 2);
     }
 }
 
@@ -165,35 +136,15 @@ F1App::F1App() : _task("f1", TaskStackSize, [this] { poll(); }) {
     _task.setInterval(PollIntervalMs);
 }
 
-void F1App::describeConfig(ConfigSchema& schema) const {
-    schema.text("host", "MultiViewer address (IP of the PC)", MaxHostLength);
-    schema.number("port", "MultiViewer port", 1, 65535);
-}
-
-void F1App::getConfig(JsonObject config) const {
-    std::lock_guard lock(_mutex);
-    config["host"] = _host;
-    config["port"] = _port;
-}
-
-void F1App::setConfig(const JsonObjectConst config) {
+void F1App::settings(AppSettings& settings) {
     std::lock_guard lock(_mutex);
 
-    std::string host = _host;
-    if (const char* text = config["host"]) {
-        // Accept a pasted URL like "http://192.168.1.20:10101/" and keep only the host
-        host = text;
-        const auto scheme = host.find("://");
-        if (scheme != std::string::npos) host.erase(0, scheme + 3);
-        const auto end = host.find_first_of(":/ ");
-        if (end != std::string::npos) host.erase(end);
-        host = host.substr(0, MaxHostLength);
-    }
-    const int32_t port = readNumber(config["port"], _port, 1, 65535);
+    const std::string host = _host;
+    const int32_t port = _port;
+    settings.text("host", "MultiViewer address (IP of the PC)", _host, MaxHostLength, hostOf);
+    settings.number("port", "MultiViewer port", _port, 1, 65535);
 
-    if (host == _host && port == _port) return;
-    _host = host;
-    _port = port;
+    if (_host == host && _port == port) return;
     ++_generation;
     _status = _host.empty() ? Status::NotConfigured : Status::Connecting;
     _task.runNow();
@@ -220,7 +171,7 @@ void F1App::poll() {
         std::lock_guard lock(_mutex);
         if (_host.empty()) return;
         url = "http://" + String(_host.c_str()) + ":" + String(_port) + "/api/graphql";
-        // The last answer's session type and flag decide how much to fetch
+        // The last answer's session type decides how much to fetch
         query = F1::buildQuery(_status == Status::Live ? &_state : nullptr);
         generation = _generation;
     }
@@ -235,11 +186,13 @@ void F1App::poll() {
     F1::buildResponseFilter(filter);
 
     JsonDocument doc;
-    const bool reached = postJson(url, payload, doc, &filter, RequestTimeoutMs);
+    HttpOptions options;
+    options.timeoutMs = RequestTimeoutMs;
+    const bool reached = postJson(url, payload, doc, &filter, options) == HTTP_CODE_OK;
     const uint32_t now = millis();
 
     F1::LiveState state;
-    const bool live = reached && F1::parseLiveState(doc["data"], now, currentEpochMs(), state);
+    const bool live = reached && F1::parseLiveState(doc["data"], now, SystemClock::epochMs(), state);
 
     std::lock_guard lock(_mutex);
     if (generation != _generation) return;
@@ -315,14 +268,14 @@ void F1App::renderLive(IDisplay& display, const uint32_t nowMs) {
     switch (_state.kind) {
         case SessionKind::Race:
         case SessionKind::Sprint: {
-            drawCenteredLine(display, 1, F1::shortMeetingName(_state.meeting).c_str(), MeetingColor);
-            drawCenteredLine(display, LabelY, _state.kind == SessionKind::Race ? "LAP" : "SPRINT LAP", LabelColor);
+            drawTextCentered(display, 1, F1::shortMeetingName(_state.meeting), Colors::Silver);
+            drawTextCentered(display, LabelY, _state.kind == SessionKind::Race ? "LAP" : "SPRINT LAP", Colors::Gray);
             if (_state.totalLaps > 0) {
                 snprintf(value, sizeof(value), "%d/%d", _state.currentLap, _state.totalLaps);
             } else {
                 snprintf(value, sizeof(value), "%d", _state.currentLap);
             }
-            drawCenteredLine(display, ValueY, value, Colors::White, 3);
+            drawTextCentered(display, ValueY, value, Colors::White, Fonts::Font5x7, 3);
             break;
         }
 
@@ -349,12 +302,11 @@ void F1App::renderLive(IDisplay& display, const uint32_t nowMs) {
             break;
 
         case SessionKind::Unknown:
-            drawCenteredLine(display, 1, F1::shortMeetingName(_state.meeting).c_str(), MeetingColor);
-            snprintf(label, sizeof(label), "SESSION");
-            drawCenteredLine(display, LabelY, label, LabelColor);
+            drawTextCentered(display, 1, F1::shortMeetingName(_state.meeting), Colors::Silver);
+            drawTextCentered(display, LabelY, "SESSION", Colors::Gray);
             if (_state.hasClock) {
                 F1::formatClock(F1::remainingMs(_state, nowMs), value, sizeof(value));
-                drawCenteredLine(display, ValueY, value, Colors::White, strlen(value) > 5 ? 2 : 3);
+                drawTextCentered(display, ValueY, value, Colors::White, Fonts::Font5x7, strlen(value) > 5 ? 2 : 3);
             }
             break;
     }
@@ -362,7 +314,6 @@ void F1App::renderLive(IDisplay& display, const uint32_t nowMs) {
     const bool flagBand = flag != Flag::None && (flag != Flag::Green || flagAge < FlagFullScreenMs + GreenBandMs);
     const F1::PitLane pit = F1::pitLane(_state);
     const bool pitBand = pit != F1::PitLane::Open;
-    // Both: the flag first, then the pit lane, in turns
     if (flagBand && (!pitBand || nowMs / BandAlternateMs % 2 == 0)) {
         drawFlagBand(display, flag);
     } else if (pitBand) {
@@ -373,17 +324,15 @@ void F1App::renderLive(IDisplay& display, const uint32_t nowMs) {
 void F1App::renderTopDrivers(IDisplay& display, const uint32_t nowMs, const char* label) const {
     const auto width = static_cast<int32_t>(display.width());
 
-    // Header: "FP2" / "Q2" on the left, time left on the right
     drawText(display, 2, 1, label, Colors::White, Fonts::Font5x7, 2);
     if (_state.hasClock) {
         char clock[16];
         F1::formatClock(F1::remainingMs(_state, nowMs), clock, sizeof(clock));
-        drawRightAligned(display, width - 2, 1, clock, Colors::White, 2);
+        drawTextRight(display, width - 2, 1, clock, Colors::White, Fonts::Font5x7, 2);
     }
 
-    // Top 3: team color mark, position, driver code, best lap (in qualifying: in this part)
     if (_state.topCount == 0) {
-        drawCenteredLine(display, 28, "No laps yet", LabelColor);
+        drawTextCentered(display, 28, "No laps yet", Colors::Gray);
         return;
     }
     constexpr int32_t FirstRowY = 20;
@@ -395,8 +344,8 @@ void F1App::renderTopDrivers(IDisplay& display, const uint32_t nowMs, const char
         display.fillRect(2, static_cast<int16_t>(y - 1), 2, 9, Color::fromHex(driver.teamColor));
         char position[4];
         snprintf(position, sizeof(position), "%d", i + 1);
-        drawText(display, 7, y, position, LabelColor);
+        drawText(display, 7, y, position, Colors::Gray);
         drawText(display, 16, y, driver.code.c_str(), Colors::White);
-        drawRightAligned(display, width - 2, y, driver.bestLap.empty() ? "--" : driver.bestLap.c_str(), Colors::White);
+        drawTextRight(display, width - 2, y, driver.bestLap.empty() ? "--" : driver.bestLap, Colors::White);
     }
 }

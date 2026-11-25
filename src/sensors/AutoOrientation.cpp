@@ -1,10 +1,7 @@
 #include <Arduino.h>
 #include <cmath>
 #include "sensors/AutoOrientation.h"
-
-#define DEBUG true  //set to true for debug output, false for no debug output
-#define DEBUG_PRINT if(DEBUG)Serial
-#define DEBUG_PRINTF if(DEBUG)printf
+#include "Log.h"
 
 namespace {
     // The accelerometer axis that runs along the panel's height, and its sign with the panel upright.
@@ -29,7 +26,7 @@ void AutoOrientation::begin(const OrientationMode mode) {
     if (readVertical(vertical)) {
         _tracker = OrientationTracker(vertical < 0 ? Orientation::UpsideDown : Orientation::Upright);
         const Acceleration reading = lastReading();
-        DEBUG_PRINTF("Accelerometer: x %.2f g, y %.2f g, z %.2f g, panel %s\n", reading.x, reading.y, reading.z,
+        LOGF("Accelerometer: x %.2f g, y %.2f g, z %.2f g, panel %s\n", reading.x, reading.y, reading.z,
                      vertical < 0 ? "upside down" : "upright");
     }
     setMode(mode);
@@ -54,9 +51,21 @@ Orientation AutoOrientation::update(const uint32_t now) {
     const Orientation tracked = _tracker.update(vertical, now);
     if (_mode == OrientationMode::Auto && tracked != _current) {
         _current = tracked;
-        DEBUG_PRINTF("Panel turned %s\n", tracked == Orientation::UpsideDown ? "upside down" : "upright");
+        LOGF("Panel turned %s\n", tracked == Orientation::UpsideDown ? "upside down" : "upright");
     }
     return _current;
+}
+
+void AutoOrientation::describe(const JsonObject out) const {
+    out["sensor"] = _sensorPresent.load();
+    out["mode"] = orientationModeName(_mode);
+    out["upsideDown"] = _current == Orientation::UpsideDown;
+    if (_sensorPresent) {
+        const Acceleration reading = lastReading();
+        out["x"] = reading.x;
+        out["y"] = reading.y;
+        out["z"] = reading.z;
+    }
 }
 
 Acceleration AutoOrientation::lastReading() const {

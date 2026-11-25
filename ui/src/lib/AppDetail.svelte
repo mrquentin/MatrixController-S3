@@ -3,10 +3,12 @@
     import {apiRequest} from "$lib/api";
     import {busyStore} from "$lib/services/busy.svelte";
     import {ENDPOINTS} from "$lib/config";
+    import {byteLength} from "$lib/format";
     import PageHeader from "$lib/PageHeader.svelte";
     import SegmentedControl from "$lib/SegmentedControl.svelte";
     import SaveBar from "$lib/SaveBar.svelte";
     import Icon from "$lib/Icon.svelte";
+    import BackButton from "$lib/BackButton.svelte";
 
     // Form generated from the app's schema, so new firmware apps need no UI code
     let { app, active, onActivate, onBack, onSaved }: {
@@ -26,9 +28,15 @@
         return field.type === 'color' ? String(a).toLowerCase() === String(b).toLowerCase() : a === b;
     }
 
+    // Longer texts (a scrolling message) get a box that grows instead of a single line
+    const MULTILINE_ABOVE = 64;
+
     function fieldError(field: AppField): string | null {
-        if (field.type !== 'number') return null;
         const value = values[field.key];
+        if (field.type === 'text') {
+            return byteLength(String(value ?? '')) > field.maxLength ? `${field.label} is too long.` : null;
+        }
+        if (field.type !== 'number') return null;
         if (typeof value !== 'number' || !Number.isInteger(value) || value < field.min || value > field.max) {
             return `${field.label} must be a whole number from ${field.min} to ${field.max}.`;
         }
@@ -46,7 +54,7 @@
     async function save(): Promise<boolean> {
         error = null;
         return busyStore.run(async () => {
-            const res = await apiRequest<{ config: AppConfig }>(ENDPOINTS.POST_APP_CONFIG, "POST", { id: app.id, config: values });
+            const res = await apiRequest<{ config: AppConfig }>(ENDPOINTS.APP_CONFIG, "POST", { id: app.id, config: values });
             if (!res.data) {
                 error = res.error;
                 return false;
@@ -64,9 +72,7 @@
     }
 </script>
 
-<button type="button" class="pressable -ml-1.5 mb-3 flex items-center gap-0.5 rounded-md py-1 pr-2 text-[1.0625rem] text-primary" onclick={onBack}>
-    <Icon name="back" class="size-5" strokeWidth={2.5}/> Apps
-</button>
+<BackButton label="Apps" {onBack}/>
 
 <PageHeader title={app.name} subtitle={active ? 'Showing on the panel' : undefined}/>
 
@@ -101,10 +107,10 @@
                             <span class="flex items-baseline">
                                 {field.label}
                                 <span class="ml-auto text-[0.75rem] text-base-content/40 tabular-nums">
-                                    {String(values[field.key] ?? '').length}/{field.maxLength}
+                                    {byteLength(String(values[field.key] ?? ''))}/{field.maxLength}
                                 </span>
                             </span>
-                            {#if field.maxLength > 64}
+                            {#if field.maxLength > MULTILINE_ABOVE}
                                 <textarea rows="2" maxlength={field.maxLength} bind:value={values[field.key]}
                                           class="field-sizing-content min-h-12 resize-none bg-transparent text-base-content/70 outline-none focus:text-base-content"></textarea>
                             {:else}

@@ -2,10 +2,7 @@
 #include <algorithm>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include "display/Hub75Display.h"
-
-#define DEBUG true  //set to true for debug output, false for no debug output
-#define DEBUG_PRINT if(DEBUG)Serial
-#define DEBUG_PRINTF if(DEBUG)printf
+#include "Log.h"
 
 namespace {
     // Adafruit MatrixPortal S3 HUB75 connector wiring. The board labels its color pins
@@ -47,7 +44,7 @@ bool Hub75Display::begin(const DisplayConfig& config) {
     _config = config;
     _config.brightness = std::min(config.brightness, MaxBrightness);
 
-    HUB75_I2S_CFG cfg(config.width, config.height, 1, MatrixPortalS3Pins);
+    HUB75_I2S_CFG cfg(PanelWidth, PanelHeight, 1, MatrixPortalS3Pins);
     cfg.double_buff = config.doubleBuffer;
     cfg.min_refresh_rate = MinRefreshRateHz;
     if (config.fastRefresh) {
@@ -59,8 +56,8 @@ bool Hub75Display::begin(const DisplayConfig& config) {
 
     _panel = std::make_unique<MatrixPanel_I2S_DMA>(cfg);
     if (!_panel->begin()) {
-        DEBUG_PRINTF("HUB75 init failed for %ux%u (double buffer: %d), not enough DMA memory?\n",
-                     config.width, config.height, config.doubleBuffer);
+        LOGF("HUB75 init failed for %ux%u (double buffer: %d), not enough DMA memory?\n",
+                     PanelWidth, PanelHeight, config.doubleBuffer);
         _panel.reset();
         return false;
     }
@@ -70,28 +67,24 @@ bool Hub75Display::begin(const DisplayConfig& config) {
     clear();
     present();
 
-    DEBUG_PRINTF("HUB75 ready: %ux%u, brightness %u, double buffer: %d, refresh %d Hz\n",
-                 config.width, config.height, _config.brightness, config.doubleBuffer,
+    LOGF("HUB75 ready: %ux%u, brightness %u, double buffer: %d, refresh %d Hz\n",
+                 PanelWidth, PanelHeight, _config.brightness, config.doubleBuffer,
                  _panel->calculated_refresh_rate);
     return true;
 }
 
-bool Hub75Display::isReady() const {
-    return _panel != nullptr;
-}
-
 uint16_t Hub75Display::width() const {
-    return _config.width;
+    return PanelWidth;
 }
 
 uint16_t Hub75Display::height() const {
-    return _config.height;
+    return PanelHeight;
 }
 
 void Hub75Display::setPixel(const int16_t x, const int16_t y, const Color color) {
-    if (!_panel || x < 0 || y < 0 || x >= _config.width || y >= _config.height) return;
+    if (!_panel || x < 0 || y < 0 || x >= PanelWidth || y >= PanelHeight) return;
     if (_orientation == Orientation::UpsideDown) {
-        _panel->drawPixelRGB888(_config.width - 1 - x, _config.height - 1 - y, color.r, color.g, color.b);
+        _panel->drawPixelRGB888(PanelWidth - 1 - x, PanelHeight - 1 - y, color.r, color.g, color.b);
     } else {
         _panel->drawPixelRGB888(x, y, color.r, color.g, color.b);
     }
@@ -105,28 +98,20 @@ void Hub75Display::fill(const Color color) {
 void Hub75Display::fillRect(const int16_t x, const int16_t y, const int16_t w, const int16_t h, const Color color) {
     if (!_panel) return;
 
-    // Clip here: the driver's fast rect fill doesn't handle empty or off-screen rects
-    const int32_t x0 = std::max<int32_t>(x, 0);
-    const int32_t y0 = std::max<int32_t>(y, 0);
-    const int32_t x1 = std::min<int32_t>(static_cast<int32_t>(x) + w, _config.width);
-    const int32_t y1 = std::min<int32_t>(static_cast<int32_t>(y) + h, _config.height);
-    if (x0 >= x1 || y0 >= y1) return;
+    // The driver's fast rect fill doesn't handle empty or off-screen rects
+    const Span span = clip(x, y, w, h);
+    if (span.empty()) return;
 
-    // Turned over, the rect's far corner becomes its near one
-    const int32_t left = _orientation == Orientation::UpsideDown ? _config.width - x1 : x0;
-    const int32_t top = _orientation == Orientation::UpsideDown ? _config.height - y1 : y0;
+    const int32_t left = _orientation == Orientation::UpsideDown ? PanelWidth - span.x1 : span.x0;
+    const int32_t top = _orientation == Orientation::UpsideDown ? PanelHeight - span.y1 : span.y0;
     _panel->fillRect(static_cast<int16_t>(left), static_cast<int16_t>(top),
-                     static_cast<int16_t>(x1 - x0), static_cast<int16_t>(y1 - y0),
+                     static_cast<int16_t>(span.x1 - span.x0), static_cast<int16_t>(span.y1 - span.y0),
                      color.r, color.g, color.b);
 }
 
 void Hub75Display::setBrightness(const uint8_t level) {
     _config.brightness = std::min(level, MaxBrightness);
     if (_panel) _panel->setBrightness8(_config.brightness);
-}
-
-uint8_t Hub75Display::brightness() const {
-    return _config.brightness;
 }
 
 void Hub75Display::setOrientation(const Orientation orientation) {

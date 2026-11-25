@@ -20,8 +20,6 @@ public:
     /// Looks for the chip and starts it. Returns false when there is none, every read then fails.
     bool begin();
     [[nodiscard]] bool isPresent() const { return _address != 0; }
-    /// I2C address the chip answered on, 0 when not found
-    [[nodiscard]] uint8_t address() const { return _address; }
 
     /// Latest reading. Returns false if the chip doesn't answer.
     bool read(Acceleration& out) const;

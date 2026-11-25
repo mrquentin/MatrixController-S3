@@ -1,18 +1,17 @@
 <script lang="ts">
-    import type {AppConfig, AppsState, SystemConfig} from "$lib/interfaces";
+    import type {AppConfig, AppsState, ConfigState} from "$lib/interfaces";
     import {apiRequest, type ApiResponse} from "$lib/api";
     import {busyStore} from "$lib/services/busy.svelte";
-    import {DEFAULT_DISPLAY_CONFIG, ENDPOINTS} from "$lib/config";
+    import {ENDPOINTS} from "$lib/config";
     import {onMount} from "svelte";
-    import {fade, fly} from "svelte/transition";
-    import {prefersReducedMotion} from "svelte/motion";
-    import {FADE_MS} from "$lib/motion";
+    import {push} from "$lib/motion";
+    import Alert from "$lib/Alert.svelte";
     import PageHeader from "$lib/PageHeader.svelte";
     import PanelPreview from "$lib/PanelPreview.svelte";
     import AppDetail from "$lib/AppDetail.svelte";
     import Icon, {type IconName} from "$lib/Icon.svelte";
 
-    let { config }: { config: SystemConfig | null } = $props();
+    let { config }: { config: ConfigState | null } = $props();
 
     // Known apps get their own glyph and tint; new firmware apps fall back to a generic tile
     const APP_STYLE: Record<string, { icon: IconName, tint: string }> = {
@@ -23,23 +22,15 @@
     };
     const FALLBACK_STYLE = { icon: 'overview' as IconName, tint: 'bg-[#8e8e93]' };
 
-    let apps = $state<ApiResponse<AppsState>>({data: null, error: null, loading: false});
+    let apps = $state<ApiResponse<AppsState>>({data: null, error: null});
     let openId = $state<string | null>(null);
 
-    let display = $derived({ ...DEFAULT_DISPLAY_CONFIG, ...config?.display });
     let activeApp = $derived(apps.data?.apps.find(a => a.id === apps.data?.active));
     let openApp = $derived(apps.data?.apps.find(a => a.id === openId));
 
-    // Pushed views slide in from the trailing edge; going back brings the list in from the leading edge
-    function push(node: Element, { direction }: { direction: 1 | -1 }) {
-        return prefersReducedMotion.current
-            ? fade(node, { duration: FADE_MS })
-            : fly(node, { x: 24 * direction, duration: 260, opacity: 0 });
-    }
-
     async function load() {
         await busyStore.run(async () => {
-            apps = await apiRequest<AppsState>(ENDPOINTS.GET_APPS);
+            apps = await apiRequest<AppsState>(ENDPOINTS.APPS);
         });
     }
 
@@ -49,7 +40,7 @@
         const previous = apps.data.active;
         apps.data.active = id;
         apps.error = null;
-        const res = await busyStore.run(() => apiRequest<null>(ENDPOINTS.POST_APP_ACTIVE, "POST", {id}));
+        const res = await busyStore.run(() => apiRequest<null>(ENDPOINTS.APP_ACTIVE, "POST", {id}));
         if (res.error && apps.data) {
             apps.data.active = previous;
             apps.error = res.error;
@@ -82,18 +73,14 @@
         <PageHeader title="Apps"/>
 
         {#if apps.error}
-            <div role="alert" class="mb-6 flex items-start gap-3 rounded-box bg-error/10 px-4 py-3 text-error">
-                <Icon name="warning" class="mt-0.5 size-5 shrink-0"/>
-                <div>
-                    <p class="font-semibold">Couldn't reach the controller</p>
-                    <p class="text-[0.875rem] opacity-80">{apps.error}</p>
-                </div>
-            </div>
+            <div class="mb-6"><Alert title="Couldn't reach the controller" message={apps.error}/></div>
         {/if}
 
-        <div class="mb-8">
-            <PanelPreview {display} label="Now showing" title={activeApp?.name ?? 'Nothing'}/>
-        </div>
+        {#if config}
+            <div class="mb-8">
+                <PanelPreview {config} label="Now showing" title={activeApp?.name ?? 'Nothing'}/>
+            </div>
+        {/if}
 
         {#if apps.data}
             <section>

@@ -3,13 +3,17 @@
 #ifndef _UPDATEPASSWORD_h
 #define _UPDATEPASSWORD_h
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
-/// Password that firmware updates need, kept in NVS like the WiFi settings, so it survives
-/// updates. Only its MD5 is stored: the form ArduinoOTA (PlatformIO's espota uploads) checks.
-/// Until one is set, updates are refused.
+/// Password that firmware updates need, kept in NVS so it survives updates. Only its MD5 is
+/// stored: the form ArduinoOTA (PlatformIO's espota uploads) checks. Until one is set, updates
+/// are refused.
 namespace UpdatePassword {
+    constexpr size_t MinLength = 8;
+    constexpr size_t MaxLength = 64;
+
     enum class Result : uint8_t {
         Ok,
         NotSet,
@@ -24,7 +28,7 @@ namespace UpdatePassword {
     Result check(const std::string& password);
     /// Stores a new password. Returns false if it isn't valid.
     bool set(const std::string& password);
-    /// 8 to 64 characters.
+    /// MinLength to MaxLength characters.
     [[nodiscard]] bool isValid(const std::string& password);
 }
 

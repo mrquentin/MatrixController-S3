@@ -4,12 +4,8 @@
 #include <ESPmDNS.h>
 #include <Update.h>
 
-#include "Config.h"
 #include "ota/UpdatePassword.h"
-
-#define DEBUG true  //set to true for debug output, false for no debug output
-#define DEBUG_PRINT if(DEBUG)Serial
-#define DEBUG_PRINTF if(DEBUG)printf
+#include "Log.h"
 
 namespace {
     const char* errorName(const ota_error_t error) {
@@ -28,7 +24,7 @@ NetworkUpload::NetworkUpload(FirmwareUpdate& update) : _update(update) {}
 
 void NetworkUpload::begin() {
     ArduinoOTA.setPort(Port);
-    // mDNS is already running (MDNSName), the service is announced on it in start()
+    // mDNS is already running, the service is announced on it in start()
     ArduinoOTA.setMdnsEnabled(false);
     // The restart is left to loop(), which says so on the panel first
     ArduinoOTA.setRebootOnSuccess(false);
@@ -50,7 +46,7 @@ void NetworkUpload::begin() {
         _attempt = 0;
     });
     ArduinoOTA.onError([this](const ota_error_t error) {
-        DEBUG_PRINTF("Network upload: %s\n", errorName(error));
+        LOGF("Network upload: %s\n", errorName(error));
         // A wrong password is refused before anything starts
         _update.complete(_attempt, false, errorName(error));
         _attempt = 0;
@@ -65,7 +61,7 @@ void NetworkUpload::start() {
     // Lets PlatformIO and the Arduino IDE find the board, marked as needing a password
     MDNS.enableArduino(Port, true);
     _listening = true;
-    DEBUG_PRINTF("Network upload: listening on port %u\n", Port);
+    LOGF("Network upload: listening on port %u\n", Port);
 }
 
 void NetworkUpload::passwordChanged() {

@@ -2,38 +2,20 @@
 
 #ifndef _SYSTEMMANAGER_h
 #define _SYSTEMMANAGER_h
+
 #include <atomic>
 #include <cstdint>
 #include <string>
-#include <Arduino.h>
+#include <ArduinoJson.h>
 
 class SystemManager {
 public:
-    struct Status {
-        bool wifiConnected;
-        String wifiIp;
-        int32_t wifiChannel;
-        int32_t wifiQuality;
-        int32_t wifiRssi;
-        String wifiGatewayIp;
-        String wifiMACAddress;
-        const char * wifiMDNSName;
-        size_t memoryFreeHeap;
-        size_t memoryMaxBlock;
-        uint32_t memoryMinFreeHeap;
-        uint32_t psramSize;
-        uint32_t psramFree;
-        uint32_t cpuFreqMHz;
-        const char * chipModel;
-        uint32_t uptimeSeconds;
-        const char * resetReason;
-    };
-    SystemManager();
-    Status getStatus();
+    /// Writes the board's state for the web UI's status page: WiFi, memory, chip, uptime, last reset.
+    void describe(JsonObject out) const;
 
     /// Asks for a restart once delayMs have passed, so the web request that asked for it can still
     /// be answered. note is shown on the panel meanwhile (e.g. the network about to be joined).
-    /// Safe to call from the web server task; the restart itself happens in restartIfDue().
+    /// Safe to call from any task; the restart itself happens in restartIfDue().
     void scheduleRestart(const std::string& note, uint32_t delayMs = 2000);
     [[nodiscard]] bool restartPending() const { return _restartAtMs != 0; }
     /// Only read once restartPending() is true

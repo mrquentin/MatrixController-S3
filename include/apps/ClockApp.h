@@ -12,9 +12,7 @@ public:
     [[nodiscard]] const char* id() const override { return "clock"; }
     [[nodiscard]] const char* name() const override { return "Clock"; }
 
-    void describeConfig(ConfigSchema& schema) const override;
-    void getConfig(JsonObject config) const override;
-    void setConfig(JsonObjectConst config) override;
+    void settings(AppSettings& settings) override;
 
     void render(IDisplay& display, uint32_t nowMs) override;
 

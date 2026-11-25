@@ -3,13 +3,11 @@
 #include <atomic>
 #include <Arduino.h>
 #include <MD5Builder.h>
-#include <Preferences.h>
+#include "Nvs.h"
 
 namespace {
-    constexpr const char* Namespace = "update";
+    constexpr const char* Space = "update";
     constexpr const char* HashKey = "passwordMd5";
-    constexpr size_t MinLength = 8;
-    constexpr size_t MaxLength = 64;
     // After this many wrong passwords in a row, every check fails for LockoutMs. Slows guessing
     // down to a handful of tries a minute
     constexpr uint8_t MaxFailures = 5;
@@ -41,12 +39,7 @@ namespace UpdatePassword {
     }
 
     std::string hash() {
-        Preferences prefs;
-        // Read-write so a missing namespace is created instead of logged as an error
-        prefs.begin(Namespace, false);
-        std::string stored = prefs.isKey(HashKey) ? prefs.getString(HashKey).c_str() : "";
-        prefs.end();
-        return stored;
+        return Nvs::read(Space, HashKey);
     }
 
     Result check(const std::string& password) {
@@ -70,10 +63,7 @@ namespace UpdatePassword {
 
     bool set(const std::string& password) {
         if (!isValid(password)) return false;
-        Preferences prefs;
-        prefs.begin(Namespace, false);
-        prefs.putString(HashKey, md5Hex(password).c_str());
-        prefs.end();
+        Nvs::write(Space, HashKey, md5Hex(password));
         return true;
     }
 

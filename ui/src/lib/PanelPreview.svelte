@@ -1,16 +1,17 @@
 <script lang="ts">
-    import type {DisplayConfig} from "$lib/interfaces";
-    import {MAX_BRIGHTNESS} from "$lib/config";
+    import type {ConfigState} from "$lib/interfaces";
 
-    let { display, label, title }: { display: DisplayConfig, label: string, title: string } = $props();
+    let { config, label, title }: { config: ConfigState, label: string, title: string } = $props();
 
-    let brightness = $derived(Math.round(display.brightness / MAX_BRIGHTNESS * 100));
+    let width = $derived(config.limits.panelWidth);
+    let height = $derived(config.limits.panelHeight);
+    let brightness = $derived(Math.round(config.config.display.brightness / config.limits.maxBrightness * 100));
 </script>
 
 <!-- One dot per LED, lit at the saved brightness -->
 <figure class="overflow-hidden rounded-box bg-black p-4 shadow-[0_8px_30px_rgb(0_0_0/0.12)] sm:p-6">
-    <svg viewBox="0 0 {display.width} {display.height}" class="block w-full" role="img"
-         aria-label="{display.width} by {display.height} LED panel at {brightness}% brightness">
+    <svg viewBox="0 0 {width} {height}" class="block w-full" role="img"
+         aria-label="{width} by {height} LED panel at {brightness}% brightness">
         <defs>
             <pattern id="led" width="1" height="1" patternUnits="userSpaceOnUse">
                 <circle cx="0.5" cy="0.5" r="0.36" fill="white"/>
@@ -36,7 +37,7 @@
             <p class="truncate text-[1.375rem] font-semibold tracking-[-0.02em]">{title}</p>
         </div>
         <p class="shrink-0 pb-1 text-right text-[0.8125rem] text-white/60 tabular-nums">
-            {display.width} × {display.height} · {brightness}%
+            {width} × {height} · {brightness}%
         </p>
     </figcaption>
 </figure>

@@ -23,8 +23,6 @@ public:
     }
     void fill(const Color color) override { std::fill(_pixels.begin(), _pixels.end(), color); }
 
-    void setBrightness(const uint8_t level) override { _brightness = level; }
-    [[nodiscard]] uint8_t brightness() const override { return _brightness; }
     void present() override { ++presents; }
 
     [[nodiscard]] Color at(const int16_t x, const int16_t y) const { return _pixels[static_cast<size_t>(y) * _width + x]; }
@@ -39,5 +37,4 @@ private:
     uint16_t _width;
     uint16_t _height;
     std::vector<Color> _pixels;
-    uint8_t _brightness = 255;
 };

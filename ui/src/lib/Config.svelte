@@ -1,9 +1,10 @@
 <script lang="ts">
     import {apiRequest} from "$lib/api";
-    import type {OrientationMode, SystemConfig, UpdateStatus} from "$lib/interfaces";
+    import type {ConfigState, OrientationMode, SystemConfig, UpdateStatus, WifiState} from "$lib/interfaces";
+    import Alert from "$lib/Alert.svelte";
     import {busyStore} from "$lib/services/busy.svelte";
     import {themeStore, type ThemeMode} from "$lib/services/theme.svelte";
-    import {DEFAULT_DISPLAY_CONFIG, DEFAULT_TIMEZONE, DISPLAY_HEIGHTS, ENDPOINTS, MAX_BRIGHTNESS, TIMEZONES} from "$lib/config";
+    import {ENDPOINTS, ORIENTATION_LABELS, TIMEZONES} from "$lib/config";
     import PageHeader from "$lib/PageHeader.svelte";
     import SegmentedControl from "$lib/SegmentedControl.svelte";
     import SaveBar from "$lib/SaveBar.svelte";
@@ -13,14 +14,16 @@
     import OptionsPage from "$lib/OptionsPage.svelte";
     import FirmwarePage from "$lib/FirmwarePage.svelte";
     import {onMount} from "svelte";
-    import {fade, fly} from "svelte/transition";
-    import {prefersReducedMotion} from "svelte/motion";
-    import {FADE_MS} from "$lib/motion";
+    import {push} from "$lib/motion";
+    import {splitLabel} from "$lib/format";
 
-    let { config, reload }: { config: SystemConfig | null, reload: () => Promise<void> } = $props();
+    let { config, reload }: { config: ConfigState | null, reload: () => Promise<void> } = $props();
 
     // WiFi and restart: each change restarts the controller, so each is confirmed first
-    let wifiSsid = $state<string | null>(null);
+    let wifi = $state<WifiState | null>(null);
+    let wifiSsid = $derived(wifi?.ssid ?? null);
+    let address = $derived(wifi ? `http://${wifi.hostname}` : 'its address');
+    let loadError = $state<string | null>(null);
     // Pushed page shown instead of the settings list
     let subpage = $state<'wifi' | 'timezone' | 'firmware' | null>(null);
     let confirmForget = $state(false);
@@ -29,28 +32,24 @@
     let actionError = $state<string | null>(null);
 
     async function loadWifi() {
-        const response = await apiRequest<{ ssid: string }>(ENDPOINTS.GET_WIFI);
-        if (response.data) wifiSsid = response.data.ssid;
+        const response = await apiRequest<WifiState>(ENDPOINTS.WIFI);
+        if (response.data) wifi = response.data;
+        loadError = response.error;
     }
 
     let updateStatus = $state<UpdateStatus | null>(null);
+    let updateError = $state<string | null>(null);
 
     async function loadUpdate() {
-        const response = await apiRequest<UpdateStatus>(ENDPOINTS.GET_UPDATE);
+        const response = await apiRequest<UpdateStatus>(ENDPOINTS.UPDATE);
         if (response.data) updateStatus = response.data;
+        updateError = response.error;
     }
 
     onMount(() => {
         loadWifi();
         loadUpdate();
     });
-
-    // Same pushed-view motion as the app pages
-    function push(node: Element, { direction }: { direction: 1 | -1 }) {
-        return prefersReducedMotion.current
-            ? fade(node, { duration: FADE_MS })
-            : fly(node, { x: 24 * direction, duration: 260, opacity: 0 });
-    }
 
     function show(page: typeof subpage) {
         subpage = page;
@@ -80,7 +79,7 @@
         await new Promise(resolve => setTimeout(resolve, 5000));
         for (let attempt = 0; attempt < 30 && restarting; attempt++) {
             try {
-                const response = await fetch(ENDPOINTS.GET_SYSTEM_STATUS, { signal: AbortSignal.timeout(2000) });
+                const response = await fetch(ENDPOINTS.SYSTEM_STATUS, { signal: AbortSignal.timeout(2000) });
                 if (response.ok) {
                     restarting = null;
                     await Promise.all([reload(), loadWifi(), loadUpdate()]);
@@ -96,14 +95,14 @@
     function joinWifi(ssid: string, password: string) {
         // Back to Settings, where the restart notice shows
         show(null);
-        restartWith(ENDPOINTS.POST_WIFI, { ssid, password }, {
+        restartWith(ENDPOINTS.WIFI, { ssid, password }, {
             title: `Joining ${ssid}`,
-            message: 'The controller is restarting. If it ends up on another network or address, reopen this page at http://matrixcontroller.local. If it can\'t join, the panel shows its setup network instead.'
+            message: `The controller is restarting. If it ends up on another network or address, reopen this page at ${address}. If it can't join, the panel shows its setup network instead.`
         }, true);
     }
 
     function forgetWifi() {
-        restartWith(ENDPOINTS.POST_WIFI_FORGET, undefined, {
+        restartWith(ENDPOINTS.WIFI_FORGET, undefined, {
             title: 'WiFi forgotten',
             message: 'The controller is restarting in setup mode. Join the network shown on the panel to set up WiFi again.'
         }, false);
@@ -119,43 +118,33 @@
     }
 
     function restart() {
-        restartWith(ENDPOINTS.POST_RESTART, undefined, {
+        restartWith(ENDPOINTS.RESTART, undefined, {
             title: 'Restarting',
             message: 'This page picks the controller up again once it is back.'
         }, true);
     }
 
-    function normalize(source: SystemConfig | null): SystemConfig {
-        return {
-            debug: source?.debug ?? false,
-            // Older config.json files have no display section
-            display: { ...DEFAULT_DISPLAY_CONFIG, ...source?.display },
-            timezone: source?.timezone ?? DEFAULT_TIMEZONE
-        };
+    function copy(source: SystemConfig | undefined): SystemConfig | null {
+        return source ? JSON.parse(JSON.stringify(source)) : null;
     }
 
-    let saved = $derived(normalize(config));
+    let limits = $derived(config?.limits);
     // svelte-ignore state_referenced_locally
-    let modifiedConfig = $state<SystemConfig>(normalize(config));
+    let modifiedConfig = $state<SystemConfig | null>(copy(config?.config));
 
     // Pick up the device's values whenever they (re)load, e.g. if this page opened before the first fetch finished
     $effect(() => {
-        if (config) modifiedConfig = normalize(config);
+        if (config) modifiedConfig = copy(config.config);
     });
 
     let saveError = $state<string | null>(null);
 
-    let widthValid = $derived(Number.isInteger(modifiedConfig.display.width)
-        && modifiedConfig.display.width >= 16 && modifiedConfig.display.width <= 256);
-    let dirty = $derived(JSON.stringify(modifiedConfig) !== JSON.stringify(saved));
-    let brightnessPercent = $derived(Math.round(modifiedConfig.display.brightness / MAX_BRIGHTNESS * 100));
+    let dirty = $derived(JSON.stringify(modifiedConfig) !== JSON.stringify(config?.config ?? null));
+    let brightnessPercent = $derived(modifiedConfig && limits
+        ? Math.round(modifiedConfig.display.brightness / limits.maxBrightness * 100) : 0);
 
-    const heightOptions = DISPLAY_HEIGHTS.map(h => ({ value: h, label: `${h}` }));
-    const orientationOptions: { value: OrientationMode, label: string }[] = [
-        { value: 'auto', label: 'Auto' },
-        { value: 'upright', label: 'Upright' },
-        { value: 'upsideDown', label: 'Flipped' },
-    ];
+    const orientationOptions = (Object.keys(ORIENTATION_LABELS) as OrientationMode[])
+        .map(mode => ({ value: mode, label: ORIENTATION_LABELS[mode] }));
     const themeOptions: { value: ThemeMode, label: string }[] = [
         { value: 'system', label: 'Automatic' },
         { value: 'light', label: 'Light' },
@@ -165,17 +154,17 @@
     let theme = $state(themeStore.mode);
     $effect(() => themeStore.set(theme));
 
+    let timezone = $derived(modifiedConfig?.timezone ?? '');
     // Keep a timezone set outside the UI selectable instead of silently replacing it
-    let timezoneOptions = $derived(TIMEZONES.some(t => t.value === modifiedConfig.timezone)
-        ? TIMEZONES : [...TIMEZONES, { label: modifiedConfig.timezone, value: modifiedConfig.timezone }]);
+    let timezoneOptions = $derived(TIMEZONES.some(t => t.value === timezone)
+        ? TIMEZONES : [...TIMEZONES, { label: timezone, value: timezone }]);
     // The row has little room: "Paris, Berlin, Rome (CET/CEST)" shows as "Paris, Berlin, Rome"
-    let timezoneLabel = $derived((timezoneOptions.find(t => t.value === modifiedConfig.timezone)?.label ?? modifiedConfig.timezone)
-        .replace(/\s*\([^)]*\)$/, ''));
+    let timezoneLabel = $derived(splitLabel(timezoneOptions.find(t => t.value === timezone)?.label ?? timezone).name);
 
     async function save(): Promise<boolean> {
         saveError = null;
         return busyStore.run(async () => {
-            const response = await apiRequest<null>(ENDPOINTS.POST_SYSTEM_CONFIG, "POST", { ...modifiedConfig });
+            const response = await apiRequest<null>(ENDPOINTS.SYSTEM_CONFIG, "POST", modifiedConfig);
             if (response.error) {
                 saveError = response.error;
                 return false;
@@ -186,20 +175,20 @@
     }
 
     function revert() {
-        modifiedConfig = normalize(config);
+        modifiedConfig = copy(config?.config);
         saveError = null;
     }
 </script>
 
 {#if subpage === 'wifi'}
     <div in:push={{ direction: 1 }}>
-        <WifiPage current={wifiSsid ?? ''} onBack={() => show(null)} onJoin={joinWifi}/>
+        <WifiPage current={wifiSsid ?? ''} {address} onBack={() => show(null)} onJoin={joinWifi}/>
     </div>
 {:else if subpage === 'firmware'}
     <div in:push={{ direction: 1 }}>
-        <FirmwarePage status={updateStatus} reload={loadUpdate} onBack={() => show(null)} onInstalled={updateInstalled}/>
+        <FirmwarePage status={updateStatus} error={updateError} reload={loadUpdate} onBack={() => show(null)} onInstalled={updateInstalled}/>
     </div>
-{:else if subpage === 'timezone'}
+{:else if subpage === 'timezone' && modifiedConfig}
     <div in:push={{ direction: 1 }}>
         <OptionsPage title="Time zone" backLabel="Settings" options={timezoneOptions}
                      bind:value={modifiedConfig.timezone} onBack={() => show(null)}
@@ -208,6 +197,10 @@
 {:else}
     <div in:push={{ direction: -1 }}>
         <PageHeader title="Settings"/>
+
+        {#if loadError && !restarting}
+            <div class="mb-6"><Alert title="Couldn't reach the controller" message={loadError}/></div>
+        {/if}
 
         {#if restarting}
             <div role="status" class="mb-6 flex items-start gap-3 rounded-box bg-primary/10 px-4 py-3 text-primary">
@@ -221,33 +214,18 @@
 
         <div class="grid gap-8">
 
+            {#if modifiedConfig && limits}
             <section>
                 <h2 class="section-header">Panel</h2>
                 <div class="grouped">
-                    <label class="grouped-row cursor-text">
-                        <span>Width</span>
-                        <span class="ml-auto flex items-center gap-1 text-base-content/55">
-                            <input type="number" inputmode="numeric" min="16" max="256" step="1"
-                                   bind:value={modifiedConfig.display.width}
-                                   aria-invalid={!widthValid}
-                                   class="w-12 bg-transparent text-right tabular-nums outline-none focus:text-base-content {widthValid ? '' : 'text-error'}"/>
-                            px
-                        </span>
-                    </label>
-                    <div class="grouped-row">
-                        <span class="shrink-0">Height</span>
-                        <div class="ml-auto w-44">
-                            <SegmentedControl label="Height in pixels" options={heightOptions} bind:value={modifiedConfig.display.height}/>
-                        </div>
-                    </div>
                     <div class="grouped-row flex-col items-stretch gap-2 py-3">
                         <div class="flex items-center">
                             <span>Brightness</span>
                             <span class="row-value">{brightnessPercent}%</span>
                         </div>
-                        <input type="range" min="0" max={MAX_BRIGHTNESS} aria-label="Brightness"
+                        <input type="range" min="0" max={limits.maxBrightness} aria-label="Brightness"
                                bind:value={modifiedConfig.display.brightness} class="slider"
-                               style="--fill: {modifiedConfig.display.brightness / MAX_BRIGHTNESS * 100}%"/>
+                               style="--fill: {brightnessPercent}%"/>
                     </div>
                     <div class="grouped-row">
                         <span class="shrink-0">Orientation</span>
@@ -260,11 +238,7 @@
                         <input type="checkbox" bind:checked={modifiedConfig.display.doubleBuffer} class="switch ml-auto"/>
                     </label>
                 </div>
-                {#if !widthValid}
-                    <p class="section-footer text-error!">Width must be a whole number between 16 and 256.</p>
-                {:else}
-                    <p class="section-footer">Auto turns the picture over when the panel is hung upside down, using the board's accelerometer. Brightness and orientation apply when you save. Resolution and double buffering take effect after the controller restarts.</p>
-                {/if}
+                <p class="section-footer">Auto turns the picture over when the panel is hung upside down, using the board's accelerometer. Brightness and orientation apply when you save. Double buffering takes effect after the controller restarts.</p>
             </section>
 
             <section>
@@ -289,7 +263,8 @@
                 </div>
             </section>
 
-            <SaveBar {dirty} valid={widthValid} error={saveError} errorTitle="Settings weren't saved" onSave={save} onRevert={revert}/>
+            <SaveBar {dirty} error={saveError} errorTitle="Settings weren't saved" onSave={save} onRevert={revert}/>
+            {/if}
 
             <section>
                 <h2 class="section-header">Appearance</h2>

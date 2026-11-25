@@ -10,12 +10,14 @@
 /// can deliver (it cuts out at 192 on full white) and heats up noticeably.
 constexpr uint8_t MaxBrightness = 128;
 
-/// Physical matrix settings. Width/height and buffering are applied once at boot
-/// (DMA buffers are allocated in Hub75Display::begin), so changing them needs a reboot.
+/// The panel's size in pixels. Every screen (apps, setup, updates) is laid out for it.
+constexpr uint16_t PanelWidth = 128;
+constexpr uint16_t PanelHeight = 64;
+
+/// Panel settings. Buffering is applied once at boot (DMA buffers are allocated in
+/// Hub75Display::begin), so changing it needs a reboot.
 struct DisplayConfig {
-    uint16_t width = 128;
-    uint16_t height = 64;
-    uint8_t brightness = 128;
+    uint8_t brightness = MaxBrightness;
     bool doubleBuffer = true;
     /// Applies when saved, no reboot needed
     OrientationMode orientation = OrientationMode::Auto;

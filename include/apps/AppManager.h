@@ -27,12 +27,14 @@ public:
     /// Draws a full frame of the active app and presents it.
     void render(IDisplay& display, uint32_t nowMs);
 
-    /// Switches to the app with this id and saves the choice. Returns false if there is no such app.
-    bool activate(std::string_view id);
+    enum class Result : uint8_t { Ok, UnknownApp, NotSaved };
+
+    /// Switches to the app with this id and saves the choice.
+    Result activate(std::string_view id);
 
     /// Applies and saves settings for the app with this id, then writes the resulting
-    /// settings into result. Returns false if there is no such app.
-    bool setConfig(std::string_view id, JsonObjectConst config, JsonObject result);
+    /// settings into result.
+    Result setConfig(std::string_view id, JsonObjectConst config, JsonObject result);
 
     /// Writes {active, apps: [{id, name, schema, config}]} for the web UI.
     void describe(JsonObject out);
@@ -40,7 +42,7 @@ public:
 private:
     [[nodiscard]] App* find(std::string_view id) const;
     void switchTo(App* app);
-    void save() const;
+    [[nodiscard]] bool save();
 
     const char* _filePath;
     std::vector<App*> _apps;

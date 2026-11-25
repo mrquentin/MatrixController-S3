@@ -47,6 +47,17 @@ namespace F1 {
         }
     }
 
+    namespace {
+        bool isQualifying(const SessionKind kind) {
+            return kind == SessionKind::Qualifying || kind == SessionKind::SprintQualifying;
+        }
+
+        /// Sessions that show the top drivers, which needs TimingData and DriverList
+        bool showsTopDrivers(const SessionKind kind) {
+            return kind == SessionKind::Practice || isQualifying(kind);
+        }
+    }
+
     SessionKind sessionKind(const char* type, const char* name) {
         // Sprint qualifying was called "Sprint Shootout" in 2023
         const bool sprint = contains(name, "Sprint");
@@ -56,14 +67,6 @@ namespace F1 {
         }
         if (contains(type, "Race")) return sprint ? SessionKind::Sprint : SessionKind::Race;
         return SessionKind::Unknown;
-    }
-
-    bool isQualifying(const SessionKind kind) {
-        return kind == SessionKind::Qualifying || kind == SessionKind::SprintQualifying;
-    }
-
-    bool showsTopDrivers(const SessionKind kind) {
-        return kind == SessionKind::Practice || isQualifying(kind);
     }
 
     bool parseIsoUtc(const char* text, int64_t& ms) {
@@ -116,9 +119,8 @@ namespace F1 {
     std::string buildQuery(const LiveState* last) {
         std::string topics = "SessionInfo SessionStatus TrackStatus LapCount ExtrapolatedClock";
         if (last) {
-            // Qualifying needs TimingData for SessionPart, practice its Lines plus DriverList for the codes
-            if (isQualifying(last->kind) || showsTopDrivers(last->kind)) topics += " TimingData";
-            if (showsTopDrivers(last->kind)) topics += " DriverList";
+            // SessionPart (qualifying) and Lines are in TimingData, the driver codes in DriverList
+            if (showsTopDrivers(last->kind)) topics += " TimingData DriverList";
         }
         // Grows to hundreds of messages over a race, but it is the only source for double yellows
         // and pit lane closures; the response filter keeps only a few short fields of each
@@ -284,9 +286,10 @@ namespace F1 {
     }
 
     PitLane pitLane(const LiveState& state) {
-        if (currentFlag(state) == Flag::Chequered) return PitLane::Open;
+        const Flag flag = currentFlag(state);
+        if (flag == Flag::Chequered) return PitLane::Open;
         // The pit exit is closed while the session is red flagged, message or not
-        const bool exitClosed = state.pitExitClosed || state.trackStatus == 5 || state.sessionStatus == "Aborted";
+        const bool exitClosed = state.pitExitClosed || flag == Flag::Red || state.sessionStatus == "Aborted";
         if (state.pitEntryClosed) return exitClosed ? PitLane::Closed : PitLane::EntryClosed;
         return exitClosed ? PitLane::ExitClosed : PitLane::Open;
     }

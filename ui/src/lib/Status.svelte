@@ -2,12 +2,14 @@
     import type { SystemStatus } from "$lib/interfaces"
     import {apiRequest, type ApiResponse} from "$lib/api";
     import {busyStore} from "$lib/services/busy.svelte";
-    import {ENDPOINTS} from "$lib/config";
+    import {ENDPOINTS, ORIENTATION_LABELS} from "$lib/config";
+    import {formatBytes} from "$lib/format";
+    import Alert from "$lib/Alert.svelte";
     import {onMount} from "svelte";
     import PageHeader from "$lib/PageHeader.svelte";
     import Icon from "$lib/Icon.svelte";
 
-    let status = $state<ApiResponse<SystemStatus>>({error: null, loading: false, data: null});
+    let status = $state<ApiResponse<SystemStatus>>({error: null, data: null});
     let refreshing = $state(false);
 
     let uptime = $derived.by(() => {
@@ -23,22 +25,12 @@
     let psramUsed = $derived(status.data && status.data.psramSize > 0
         ? (status.data.psramSize - status.data.psramFree) / status.data.psramSize : 0);
 
-    // Brownouts mean the panel pulled the supply down, so they are worth calling out
-    let resetIsFault = $derived(['BROWNOUT', 'PANIC', 'INTERRUPT_WATCHDOG', 'TASK_WATCHDOG', 'WATCHDOG'].includes(status.data?.resetReason ?? ''));
 
     function formatG(value: number | undefined): string {
         return `${(value ?? 0) >= 0 ? '+' : '−'}${Math.abs(value ?? 0).toFixed(2)}`;
     }
 
-    const ORIENTATION_MODES = { auto: 'Auto', upright: 'Upright', upsideDown: 'Flipped' };
-
-    function formatBytes(bytes: number): string {
-        if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-        return `${(bytes / 1024).toFixed(1)} KB`;
-    }
-
     function humanize(value: string): string {
-        if (!/^[A-Z_]+$/.test(value)) return value;
         const text = value.replaceAll('_', ' ').toLowerCase();
         return text.charAt(0).toUpperCase() + text.slice(1);
     }
@@ -46,7 +38,7 @@
     async function load() {
         refreshing = true;
         await busyStore.run(async () => {
-            status = await apiRequest<SystemStatus>(ENDPOINTS.GET_SYSTEM_STATUS);
+            status = await apiRequest<SystemStatus>(ENDPOINTS.SYSTEM_STATUS);
         });
         refreshing = false;
     }
@@ -72,13 +64,7 @@
 </PageHeader>
 
 {#if status.error}
-    <div role="alert" class="mb-6 flex items-start gap-3 rounded-box bg-error/10 px-4 py-3 text-error">
-        <Icon name="warning" class="mt-0.5 size-5 shrink-0"/>
-        <div>
-            <p class="font-semibold">Couldn't reach the controller</p>
-            <p class="text-[0.875rem] opacity-80">{status.error}</p>
-        </div>
-    </div>
+    <div class="mb-6"><Alert title="Couldn't reach the controller" message={status.error}/></div>
 {/if}
 
 {#if status.data}
@@ -98,10 +84,9 @@
                 <div class="grouped-row">
                     <span>Signal</span>
                     <span class="row-value flex items-center justify-end gap-2">
-                        <!-- Four bars, filled by quality -->
                         <span class="flex h-3 items-end gap-0.5" aria-hidden="true">
                             {#each [25, 50, 75, 100] as threshold, i}
-                                <span class="w-[3px] rounded-[1px] {data.wifiQuality >= threshold - 12 ? 'bg-base-content/70' : 'bg-base-content/15'}"
+                                <span class="w-[3px] rounded-[1px] {(data.wifiQuality ?? 0) >= threshold - 12 ? 'bg-base-content/70' : 'bg-base-content/15'}"
                                       style="height: {(i + 1) * 25}%"></span>
                             {/each}
                         </span>
@@ -121,12 +106,12 @@
                 <h2 class="section-header">System</h2>
                 <div class="grouped">
                     <div class="grouped-row"><span>Chip</span><span class="row-value">{data.chipModel}</span></div>
-                    <div class="grouped-row"><span>Firmware</span><span class="row-value select-text">{data.firmwareVersion ?? "—"}</span></div>
+                    <div class="grouped-row"><span>Firmware</span><span class="row-value select-text">{data.firmwareVersion}</span></div>
                     <div class="grouped-row"><span>Processor</span><span class="row-value">{data.cpuFreqMHz} MHz</span></div>
                     <div class="grouped-row"><span>Uptime</span><span class="row-value">{uptime}</span></div>
                     <div class="grouped-row">
                         <span>Last reset</span>
-                        <span class="row-value {resetIsFault ? 'font-medium text-warning' : ''}">{humanize(data.resetReason)}</span>
+                        <span class="row-value {data.resetFault ? 'font-medium text-warning' : ''}">{humanize(data.resetReason)}</span>
                     </div>
                 </div>
             </section>
@@ -157,7 +142,7 @@
                         </div>
                         <div class="grouped-row">
                             <span>Showing</span>
-                            <span class="row-value">{data.orientation.upsideDown ? 'Upside down' : 'Upright'} · {ORIENTATION_MODES[data.orientation.mode] ?? data.orientation.mode}</span>
+                            <span class="row-value">{data.orientation.upsideDown ? 'Upside down' : 'Upright'} · {ORIENTATION_LABELS[data.orientation.mode] ?? data.orientation.mode}</span>
                         </div>
                         {#if data.orientation.sensor}
                             <!-- The axis pointing up reads about +1 g: tells which one runs along the panel's height -->

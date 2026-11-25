@@ -3,43 +3,33 @@ import hashlib
 
 Import("env")
 
-def hash(path, algorithm="sha256"):
-    hash_func = hashlib.new(algorithm)
+# Builds the web UI into include/ui/WebAssets.h (npm run build:full) when its sources changed since
+# the last build, which hash.txt remembers.
+UI = "ui"
+SOURCES = ["src", "public", "index.html", "package-lock.json", "vite.config.ts", "hexdump.py"]
+HASH_FILE = "hash.txt"
 
-    for root, dirs, files in os.walk(path):
-        if root.endswith(os.path.join(path, "dist")):
-            continue
 
+def sources_hash():
+    digest = hashlib.sha256()
+    for source in SOURCES:
+        path = os.path.join(UI, source)
+        files = [path] if os.path.isfile(path) else sorted(
+            os.path.join(root, name) for root, _, names in os.walk(path) for name in names)
         for file in files:
-            with open(os.path.join(root, file), "rb") as f:
-                for chunk in iter(lambda: f.read(4096), b""):
-                    hash_func.update(chunk)
+            digest.update(file.replace(os.sep, "/").encode())
+            with open(file, "rb") as f:
+                digest.update(f.read())
+    return digest.hexdigest()
 
-    return hash_func.hexdigest()
 
-# Create sha256sum of web project data
-prj_hash = hash("./ui")
-hash_file = "hash.txt"
-
-print("Running prebuild-ui.py")
-
-# Check if web project hashes match
-if os.path.exists(hash_file):
-    with open(hash_file, "r") as f:
-        last_hash = f.readline().strip()
-    build = last_hash != prj_hash
-else:
-    build = True
-
-# Perform new build otherwise
-if build:
-    print("Hash different - running npm build:full")
-    if not os.path.exists("./ui/node_modules"):
-        env.Execute("npm install './ui'")
-
-    env.Execute("npm run build:full --prefix ui")
-
-    with open(hash_file, "w") as f:
-        f.write(prj_hash)
-
-print("Completed prebuild-ui.py")
+current = sources_hash()
+previous = open(HASH_FILE).read().strip() if os.path.exists(HASH_FILE) else None
+if current != previous or not os.path.exists(os.path.join("include", "ui", "WebAssets.h")):
+    print("Web UI changed, building it")
+    if not os.path.exists(os.path.join(UI, "node_modules")) and env.Execute(f"npm ci --prefix {UI}") != 0:
+        env.Exit(1)
+    if env.Execute(f"npm run build:full --prefix {UI}") != 0:
+        env.Exit(1)
+    with open(HASH_FILE, "w") as f:
+        f.write(current)

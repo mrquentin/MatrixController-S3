@@ -1,38 +1,22 @@
-type Listener = (data: any) => void;
+// An open WebSocket to the board, so the UI can show whether it's reachable. The board sends nothing on it.
+const RECONNECT_MS = 3000;
 
 export class SocketService {
-    public lastMessage = $state<any>(null);
     public isConnected = $state<boolean>(false);
 
     private socket: WebSocket | null = null;
-    private listeners = new Set<Listener>();
-
-    subscribe(callback: Listener){
-        this.listeners.add(callback);
-        return () => this.listeners.delete(callback);
-    }
 
     connect(url: string) {
         if (this.socket) return;
 
         this.socket = new WebSocket(url);
         this.socket.onopen = () => this.isConnected = true;
-        this.socket.onclose = () => this.isConnected = false;
-
-        this.socket.onmessage = (event) => {
-            let obj = JSON.parse(event.data);
-            this.lastMessage = obj;
-            this.listeners.forEach(fn => fn(obj))
+        // After a restart the board is back on the same address
+        this.socket.onclose = () => {
+            this.isConnected = false;
+            this.socket = null;
+            setTimeout(() => this.connect(url), RECONNECT_MS);
         };
-    }
-
-    send(data: object) {
-        if (this.socket?.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify(data));
-        } else {
-            console.log("Socket closed. Retrying in 500ms");
-            setTimeout(() => {this.send(data);}, 500);
-        }
     }
 }
 

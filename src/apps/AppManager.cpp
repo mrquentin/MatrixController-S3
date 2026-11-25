@@ -2,10 +2,7 @@
 
 #include <LittleFS.h>
 #include "display/Text.h"
-
-#define DEBUG true  //set to true for debug output, false for no debug output
-#define DEBUG_PRINT if(DEBUG)Serial
-#define DEBUG_PRINTF if(DEBUG)printf
+#include "Log.h"
 
 // Saved file layout: {"active": "clock", "apps": {"clock": {...settings}, "text": {...}}}
 
@@ -22,13 +19,13 @@ void AppManager::begin() {
     if (File file = LittleFS.open(_filePath, FILE_READ)) {
         const DeserializationError error = deserializeJson(doc, file);
         file.close();
-        if (error) DEBUG_PRINTF("Failed to read %s: %s, using app defaults\n", _filePath, error.c_str());
+        if (error) LOGF("Failed to read %s: %s, using app defaults\n", _filePath, error.c_str());
     }
 
     const JsonObjectConst saved = doc["apps"];
     for (App* app : _apps) {
-        const JsonObjectConst config = saved[app->id()];
-        if (!config.isNull()) app->setConfig(config);
+        AppSettings settings = AppSettings::write(saved[app->id()]);
+        app->settings(settings);
     }
 
     App* active = find(doc["active"] | "");
@@ -48,25 +45,25 @@ void AppManager::render(IDisplay& display, const uint32_t nowMs) {
     display.present();
 }
 
-bool AppManager::activate(const std::string_view id) {
+AppManager::Result AppManager::activate(const std::string_view id) {
     std::lock_guard lock(_mutex);
 
     App* app = find(id);
-    if (!app) return false;
+    if (!app) return Result::UnknownApp;
     switchTo(app);
-    save();
-    return true;
+    return save() ? Result::Ok : Result::NotSaved;
 }
 
-bool AppManager::setConfig(const std::string_view id, const JsonObjectConst config, JsonObject result) {
+AppManager::Result AppManager::setConfig(const std::string_view id, const JsonObjectConst config, JsonObject result) {
     std::lock_guard lock(_mutex);
 
     App* app = find(id);
-    if (!app) return false;
-    app->setConfig(config);
-    app->getConfig(result);
-    save();
-    return true;
+    if (!app) return Result::UnknownApp;
+    AppSettings changes = AppSettings::write(config);
+    app->settings(changes);
+    AppSettings applied = AppSettings::read(result);
+    app->settings(applied);
+    return save() ? Result::Ok : Result::NotSaved;
 }
 
 void AppManager::describe(JsonObject out) {
@@ -74,13 +71,14 @@ void AppManager::describe(JsonObject out) {
 
     out["active"] = _active ? _active->id() : nullptr;
     JsonArray list = out["apps"].to<JsonArray>();
-    for (const App* app : _apps) {
+    for (App* app : _apps) {
         JsonObject entry = list.add<JsonObject>();
         entry["id"] = app->id();
         entry["name"] = app->name();
-        ConfigSchema schema(entry["schema"].to<JsonArray>());
-        app->describeConfig(schema);
-        app->getConfig(entry["config"].to<JsonObject>());
+        AppSettings schema = AppSettings::describe(entry["schema"].to<JsonArray>());
+        app->settings(schema);
+        AppSettings values = AppSettings::read(entry["config"].to<JsonObject>());
+        app->settings(values);
     }
 }
 
@@ -97,23 +95,25 @@ void AppManager::switchTo(App* app) {
     _active = app;
     if (_active) {
         _active->activate();
-        DEBUG_PRINTF("Active app: %s\n", _active->id());
+        LOGF("Active app: %s\n", _active->id());
     }
 }
 
-void AppManager::save() const {
+bool AppManager::save() {
     JsonDocument doc;
     doc["active"] = _active ? _active->id() : nullptr;
     JsonObject apps = doc["apps"].to<JsonObject>();
-    for (const App* app : _apps) {
-        app->getConfig(apps[app->id()].to<JsonObject>());
+    for (App* app : _apps) {
+        AppSettings values = AppSettings::read(apps[app->id()].to<JsonObject>());
+        app->settings(values);
     }
 
     File file = LittleFS.open(_filePath, FILE_WRITE);
     if (!file) {
-        DEBUG_PRINTF("Failed to open %s for writing\n", _filePath);
-        return;
+        LOGF("Failed to open %s for writing\n", _filePath);
+        return false;
     }
     serializeJson(doc, file);
     file.close();
+    return true;
 }

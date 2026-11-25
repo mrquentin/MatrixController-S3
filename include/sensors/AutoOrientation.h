@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <ArduinoJson.h>
 #include "display/Orientation.h"
 #include "sensors/Accelerometer.h"
 
@@ -22,13 +23,14 @@ public:
     Orientation update(uint32_t now);
     [[nodiscard]] Orientation current() const { return _current; }
 
-    [[nodiscard]] bool sensorPresent() const { return _sensorPresent; }
-    [[nodiscard]] OrientationMode mode() const { return _mode; }
-    /// Last reading in g, all zero before the first one
-    [[nodiscard]] Acceleration lastReading() const;
+    /// Writes the mode, the orientation shown and the sensor's last reading, for the status page:
+    /// the reading tells which axis points up.
+    void describe(JsonObject out) const;
 
 private:
     [[nodiscard]] bool readVertical(float& verticalG);
+    /// Last reading in g, all zero before the first one
+    [[nodiscard]] Acceleration lastReading() const;
 
     Accelerometer _accelerometer;
     OrientationTracker _tracker;

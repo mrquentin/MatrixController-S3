@@ -5,20 +5,12 @@ class BusyStore {
         return this._count > 0;
     }
 
-    begin(): void {
-        this._count++;
-    }
-
-    end(): void {
-        if (this._count > 0) this._count--;
-    }
-
     async run<T>(operation: () => Promise<T>): Promise<T> {
-        this.begin();
+        this._count++;
         try {
             return await operation();
         } finally {
-            this.end();
+            this._count--;
         }
     }
 }

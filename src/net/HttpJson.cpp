@@ -1,68 +1,72 @@
 #include "net/HttpJson.h"
 
-#include <HTTPClient.h>
-#include <WiFiClient.h>
-#include <WiFiClientSecure.h>
+#include "Log.h"
 
-#define DEBUG true  //set to true for debug output, false for no debug output
-#define DEBUG_PRINT if(DEBUG)Serial
-#define DEBUG_PRINTF if(DEBUG)printf
+// Mozilla's root certificates, built into the SDK's mbedTLS
+extern const uint8_t rootCertificates[] asm("_binary_x509_crt_bundle_start");
 
 namespace {
-    /// Sends a GET (body == nullptr) or a JSON POST and parses the response.
-    bool request(const String& url, const String* body, JsonDocument& doc, const JsonDocument* filter,
-                 const uint16_t timeoutMs) {
-        const bool https = url.startsWith("https://");
-        WiFiClientSecure secureClient;
-        WiFiClient plainClient;
-        // Weather and similar public data isn't worth bundling and updating root certificates for
-        if (https) secureClient.setInsecure();
-
-        HTTPClient http;
-        http.setTimeout(timeoutMs);
-        http.setConnectTimeout(timeoutMs);
-        // HTTP/1.0 rules out chunked responses, so the body can be parsed straight from the stream
-        http.useHTTP10(true);
-
-        if (!(https ? http.begin(secureClient, url) : http.begin(plainClient, url))) {
-            DEBUG_PRINTF("HTTP: invalid URL %s\n", url.c_str());
-            return false;
-        }
-
-        int status;
-        if (body) {
-            http.addHeader("Content-Type", "application/json");
-            status = http.POST(*body);
-        } else {
-            status = http.GET();
-        }
-        if (status != HTTP_CODE_OK) {
-            DEBUG_PRINTF("HTTP: %s %s failed: %d %s\n", body ? "POST" : "GET", url.c_str(), status,
-                         http.errorToString(status).c_str());
-            http.end();
-            return false;
-        }
+    int requestJson(const String& url, const String* body, JsonDocument& doc, const JsonDocument* filter,
+                    const HttpOptions& options) {
+        HttpRequest request;
+        const int status = request.send(url, options, body);
+        if (status != HTTP_CODE_OK) return status;
 
         const DeserializationError error = filter
-            ? deserializeJson(doc, http.getStream(), DeserializationOption::Filter(*filter))
-            : deserializeJson(doc, http.getStream());
-        http.end();
-
+            ? deserializeJson(doc, request.body(), DeserializationOption::Filter(*filter))
+            : deserializeJson(doc, request.body());
         if (error) {
-            DEBUG_PRINTF("HTTP: invalid JSON from %s: %s\n", url.c_str(), error.c_str());
-            return false;
+            LOGF("HTTP: invalid JSON from %s: %s\n", url.c_str(), error.c_str());
+            return HttpInvalidJson;
         }
-        return true;
+        return HTTP_CODE_OK;
     }
 }
 
-bool fetchJson(const String& url, JsonDocument& doc, const JsonDocument* filter, const uint16_t timeoutMs) {
-    return request(url, nullptr, doc, filter, timeoutMs);
+int HttpRequest::send(const String& url, const HttpOptions& options, const String* body) {
+    const bool https = url.startsWith("https://");
+    if (https) {
+        if (options.verifyCertificate) {
+            _secure.setCACertBundle(rootCertificates);
+        } else {
+            _secure.setInsecure();
+        }
+    }
+
+    _http.setTimeout(options.timeoutMs);
+    _http.setConnectTimeout(options.timeoutMs);
+    // HTTP/1.0 rules out chunked responses, so the body can be read straight from the stream
+    _http.useHTTP10(true);
+    if (options.followRedirects) _http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    if (options.userAgent) _http.setUserAgent(options.userAgent);
+
+    if (!(https ? _http.begin(_secure, url) : _http.begin(_plain, url))) {
+        LOGF("HTTP: invalid URL %s\n", url.c_str());
+        return HttpInvalidUrl;
+    }
+    if (options.accept) _http.addHeader("Accept", options.accept);
+
+    int status;
+    if (body) {
+        _http.addHeader("Content-Type", "application/json");
+        status = _http.POST(*body);
+    } else {
+        status = _http.GET();
+    }
+    if (status != HTTP_CODE_OK) {
+        LOGF("HTTP: %s %s failed: %d %s\n", body ? "POST" : "GET", url.c_str(), status,
+             HTTPClient::errorToString(status).c_str());
+    }
+    return status;
 }
 
-bool postJson(const String& url, const String& body, JsonDocument& doc, const JsonDocument* filter,
-              const uint16_t timeoutMs) {
-    return request(url, &body, doc, filter, timeoutMs);
+int fetchJson(const String& url, JsonDocument& doc, const JsonDocument* filter, const HttpOptions& options) {
+    return requestJson(url, nullptr, doc, filter, options);
+}
+
+int postJson(const String& url, const String& body, JsonDocument& doc, const JsonDocument* filter,
+             const HttpOptions& options) {
+    return requestJson(url, &body, doc, filter, options);
 }
 
 String urlEncode(const char* text) {

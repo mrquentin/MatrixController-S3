@@ -4,7 +4,12 @@
 #include "display/Text.h"
 
 void ScrollingText::setText(const std::string_view text) {
+    if (text == _text) return;
     _text = text;
+    restart();
+}
+
+void ScrollingText::restart() {
     _started = false;
 }
 
@@ -35,7 +40,6 @@ void ScrollingText::draw(IDisplay& display, const uint32_t nowMs) {
     _x -= _speed * static_cast<float>(nowMs - _lastMs) / 1000.0f;
     _lastMs = nowMs;
 
-    // Once fully off the left edge, come back in from the right
     const auto width = static_cast<float>(textWidth(_text, *_font, _scale));
     if (_x < -width) _x = display.width();
 

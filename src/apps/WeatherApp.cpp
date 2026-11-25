@@ -3,7 +3,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
+#include <string_view>
 #include "apps/WeatherIcons.h"
 #include "display/Shapes.h"
 #include "display/Text.h"
@@ -16,16 +16,14 @@ namespace {
     // TLS handshakes need a deep stack
     constexpr uint32_t TaskStackSize = 12 * 1024;
 
-    constexpr Color PlaceColor{170, 170, 180};
     constexpr Color HighColor{255, 140, 40};
     constexpr Color LowColor{80, 160, 255};
-    constexpr Color DetailColor{140, 140, 150};
 
     uint32_t minutesToMs(const int32_t minutes) {
         return static_cast<uint32_t>(minutes) * 60 * 1000;
     }
 
-    std::string trimmed(const char* text) {
+    std::string trimmed(const std::string_view text) {
         std::string value(text);
         const auto first = value.find_first_not_of(" \t");
         if (first == std::string::npos) return {};
@@ -34,7 +32,7 @@ namespace {
     }
 
     /// Keeps a valid two-letter country code (uppercased), anything else becomes "no country".
-    std::string countryCode(const char* text) {
+    std::string countryCode(const std::string_view text) {
         std::string code = trimmed(text);
         if (code.size() != 2 || !isalpha(static_cast<unsigned char>(code[0])) ||
             !isalpha(static_cast<unsigned char>(code[1]))) {
@@ -63,16 +61,8 @@ namespace {
         return textEnd + 1 + 2 * radius + 1 - x;
     }
 
-    void drawCenteredLine(IDisplay& display, const int32_t y, const char* text, const Color color) {
-        drawText(display, (static_cast<int32_t>(display.width()) - textWidth(text)) / 2, y, text, color);
-    }
-
-    void drawMessage(IDisplay& display, const char* first, const char* second) {
-        const int32_t lineHeight = textHeight() + 3;
-        const int32_t lines = second ? 2 : 1;
-        const int32_t top = (static_cast<int32_t>(display.height()) - lines * lineHeight + 3) / 2;
-        drawCenteredLine(display, top, first, Colors::White);
-        if (second) drawCenteredLine(display, top + lineHeight, second, DetailColor);
+    void drawMessage(IDisplay& display, const std::string_view first, const std::string_view second = {}) {
+        drawLines(display, {{first, Colors::White}, {second, Colors::Gray}});
     }
 }
 
@@ -80,36 +70,18 @@ WeatherApp::WeatherApp() : _task("weather", TaskStackSize, [this] { refresh(); }
     _task.setInterval(minutesToMs(_settings.refreshMinutes));
 }
 
-void WeatherApp::describeConfig(ConfigSchema& schema) const {
-    schema.text("city", "City", MaxCityLength);
-    schema.text("country", "Country code (optional, e.g. FR)", 2);
-    schema.select("units", "Units", {{"celsius", "Celsius (°C, km/h)"}, {"fahrenheit", "Fahrenheit (°F, mph)"}});
-    schema.number("refreshMinutes", "Refresh every (minutes)", 5, 180);
-}
-
-void WeatherApp::getConfig(JsonObject config) const {
-    std::lock_guard lock(_mutex);
-    config["city"] = _settings.city;
-    config["country"] = _settings.country;
-    config["units"] = _settings.fahrenheit ? "fahrenheit" : "celsius";
-    config["refreshMinutes"] = _settings.refreshMinutes;
-}
-
-void WeatherApp::setConfig(const JsonObjectConst config) {
+void WeatherApp::settings(AppSettings& settings) {
     std::lock_guard lock(_mutex);
 
-    Settings next = _settings;
-    if (const char* city = config["city"]) next.city = trimmed(city).substr(0, MaxCityLength);
-    if (const char* country = config["country"]) next.country = countryCode(country);
-    if (const char* units = config["units"]) next.fahrenheit = strcmp(units, "fahrenheit") == 0;
-    next.refreshMinutes = readNumber(config["refreshMinutes"], next.refreshMinutes, 5, 180);
+    const Settings before = _settings;
+    settings.text("city", "City", _settings.city, MaxCityLength, trimmed);
+    settings.text("country", "Country code (optional, e.g. FR)", _settings.country, 2, countryCode);
+    settings.select("units", "Units", _settings.units,
+                    {{"celsius", "Celsius (°C, km/h)"}, {"fahrenheit", "Fahrenheit (°F, mph)"}});
+    settings.number("refreshMinutes", "Refresh every (minutes)", _settings.refreshMinutes, 5, 180);
 
-    const bool dataOutdated = next.city != _settings.city || next.country != _settings.country ||
-                              next.fahrenheit != _settings.fahrenheit;
-    _settings = next;
-    _task.setInterval(minutesToMs(_settings.refreshMinutes));
-
-    if (dataOutdated) {
+    if (_settings.refreshMinutes != before.refreshMinutes) _task.setInterval(minutesToMs(_settings.refreshMinutes));
+    if (!_settings.sameData(before)) {
         ++_generation;
         _status = _settings.city.empty() ? Status::NoCity : Status::Loading;
         _task.runNow();
@@ -194,7 +166,7 @@ WeatherApp::Lookup WeatherApp::findCity(const Settings& settings, Location& loca
     filter["results"][0]["longitude"] = true;
 
     JsonDocument doc;
-    if (!fetchJson(url, doc, &filter)) return Lookup::Failed;
+    if (fetchJson(url, doc, &filter) != HTTP_CODE_OK) return Lookup::Failed;
 
     // No "results" at all means nothing matched
     const JsonObjectConst result = doc["results"][0];
@@ -213,10 +185,10 @@ bool WeatherApp::fetchWeather(const Settings& settings, const Location& location
              "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day"
              "&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto%s",
              location.latitude, location.longitude,
-             settings.fahrenheit ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : "");
+             settings.fahrenheit() ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : "");
 
     JsonDocument doc;
-    if (!fetchJson(url, doc)) return false;
+    if (fetchJson(url, doc) != HTTP_CODE_OK) return false;
 
     const JsonObjectConst current = doc["current"];
     if (current.isNull()) return false;
@@ -239,10 +211,10 @@ void WeatherApp::render(IDisplay& display, uint32_t) {
             drawMessage(display, "Set a city", "in the web UI");
             break;
         case Status::Loading:
-            drawMessage(display, "Loading weather...", nullptr);
+            drawMessage(display, "Loading weather...");
             break;
         case Status::CityNotFound:
-            drawMessage(display, "City not found", _settings.city.c_str());
+            drawMessage(display, "City not found", _settings.city);
             break;
         case Status::Unavailable:
             drawMessage(display, "Weather", "unavailable");
@@ -256,24 +228,22 @@ void WeatherApp::render(IDisplay& display, uint32_t) {
 void WeatherApp::renderReady(IDisplay& display) const {
     const auto width = static_cast<int32_t>(display.width());
 
-    // Top: place name
-    drawCenteredLine(display, 1, _place.c_str(), PlaceColor);
+    drawTextCentered(display, 1, _place, Colors::Silver);
 
-    // Middle: icon, current temperature in large digits, today's high and low on the right
     constexpr int32_t RowTop = 12;
-    drawWeatherIcon(display, 4, RowTop, _weather.code, _weather.isDay);
-    drawTemperature(display, 34, RowTop + 2, _weather.temperature, Colors::White, 3);
+    constexpr int32_t IconX = 4;
+    drawWeatherIcon(display, IconX, RowTop, _weather.code, _weather.isDay);
+    drawTemperature(display, IconX + WeatherIconSize + 6, RowTop + 2, _weather.temperature, Colors::White, 3);
 
     const int32_t highWidth = drawTemperature(display, 0, 0, _weather.high, HighColor, 1, false);
     const int32_t lowWidth = drawTemperature(display, 0, 0, _weather.low, LowColor, 1, false);
     drawTemperature(display, width - 2 - highWidth, RowTop + 3, _weather.high, HighColor, 1);
     drawTemperature(display, width - 2 - lowWidth, RowTop + 14, _weather.low, LowColor, 1);
 
-    // Bottom: conditions, then humidity and wind
-    drawCenteredLine(display, 41, describeWeather(_weather.code), Colors::White);
+    drawTextCentered(display, 41, describeWeather(_weather.code), Colors::White);
 
     char details[32];
     snprintf(details, sizeof(details), "%d%%  %ld %s", _weather.humidity, lroundf(_weather.wind),
-             _settings.fahrenheit ? "mph" : "km/h");
-    drawCenteredLine(display, 53, details, DetailColor);
+             _settings.fahrenheit() ? "mph" : "km/h");
+    drawTextCentered(display, 53, details, Colors::Gray);
 }

@@ -57,3 +57,36 @@ int32_t drawText(IDisplay& display, int32_t x, const int32_t y, const std::strin
     }
     return x;
 }
+
+void drawTextCentered(IDisplay& display, const int32_t y, const std::string_view text, const Color color,
+                      const Font& font, const uint8_t scale) {
+    const int32_t x = (static_cast<int32_t>(display.width()) - textWidth(text, font, scale)) / 2;
+    drawText(display, x, y, text, color, font, scale);
+}
+
+void drawTextRight(IDisplay& display, const int32_t right, const int32_t y, const std::string_view text,
+                   const Color color, const Font& font, const uint8_t scale) {
+    drawText(display, right - textWidth(text, font, scale), y, text, color, font, scale);
+}
+
+void showStatus(IDisplay& display, const std::string_view title, const std::string_view line,
+                const std::string_view detail) {
+    display.clear();
+    drawLines(display, {{title, Colors::Cyan}, {line, Colors::White}, {detail, Colors::Gray}}, 4);
+    display.present();
+}
+
+void drawLines(IDisplay& display, const std::initializer_list<TextLine> lines, const int32_t gap) {
+    int32_t count = 0;
+    for (const TextLine& line : lines) count += !line.text.empty();
+
+    const Font& font = Fonts::Font5x7;
+    const size_t fitting = (display.width() + font.spacing) / font.advance();
+    const int32_t lineHeight = textHeight() + gap;
+    int32_t y = (static_cast<int32_t>(display.height()) - count * lineHeight + gap) / 2;
+    for (const TextLine& line : lines) {
+        if (line.text.empty()) continue;
+        drawTextCentered(display, y, line.text.substr(0, fitting), line.color);
+        y += lineHeight;
+    }
+}

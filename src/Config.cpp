@@ -1,97 +1,83 @@
 #include "Config.h"
 
-#define DEBUG true  //set to true for debug output, false for no debug output
-#define DEBUG_PRINT if(DEBUG)Serial
-#define DEBUG_PRINTF if(DEBUG)printf
+#include <LittleFS.h>
+#include "Log.h"
 
-Config::Config(const std::string_view filePath) : FilePath(filePath) {}
+namespace {
+    SystemSettings parse(const JsonObjectConst json) {
+        const SystemSettings defaults;
+        SystemSettings settings;
+        settings.debug = json["debug"] | defaults.debug;
+        settings.timezone = json["timezone"] | defaults.timezone;
+
+        const JsonObjectConst display = json["display"];
+        DisplayConfig& out = settings.display;
+        out.brightness = display["brightness"] | defaults.display.brightness;
+        if (out.brightness > MaxBrightness) {
+            LOGF("Brightness %u above the %u limit, using %u\n", out.brightness, MaxBrightness, MaxBrightness);
+            out.brightness = MaxBrightness;
+        }
+        out.doubleBuffer = display["doubleBuffer"] | defaults.display.doubleBuffer;
+        out.orientation = parseOrientationMode(display["orientation"] | "", defaults.display.orientation);
+        return settings;
+    }
+
+    void write(const SystemSettings& settings, const JsonObject json) {
+        json["debug"] = settings.debug;
+        json["timezone"] = settings.timezone;
+        const JsonObject display = json["display"].to<JsonObject>();
+        display["brightness"] = settings.display.brightness;
+        display["doubleBuffer"] = settings.display.doubleBuffer;
+        display["orientation"] = orientationModeName(settings.display.orientation);
+    }
+}
+
+Config::Config(const char* filePath) : _filePath(filePath) {}
 
 void Config::load() {
-    if (!LittleFS.exists(FilePath.data())) {
-        DEBUG_PRINTF("Config file %s not found in filesystem!\n", FilePath.data());
-        return;
+    JsonDocument doc;
+    if (File file = LittleFS.open(_filePath, FILE_READ)) {
+        const DeserializationError error = deserializeJson(doc, file);
+        file.close();
+        if (error) LOGF("Failed to read %s: %s, using the defaults\n", _filePath, error.c_str());
+    } else {
+        LOGF("No %s, using the defaults\n", _filePath);
     }
+    set(doc.as<JsonObjectConst>());
+}
 
-    File file = LittleFS.open(FilePath.data(), "r");
+bool Config::update(const JsonObjectConst json) {
+    set(json);
+    ++_revision;
 
     JsonDocument doc;
-    const DeserializationError error = deserializeJson(doc, file);
+    write(get(), doc.to<JsonObject>());
+    File file = LittleFS.open(_filePath, FILE_WRITE);
+    if (!file) {
+        LOGF("Failed to open %s for writing\n", _filePath);
+        return false;
+    }
+    serializeJson(doc, file);
     file.close();
-
-    if (error) {
-        DEBUG_PRINT.print("Failed to load JSON. Error: ");
-        DEBUG_PRINT.println(error.f_str());
-        return;
-    }
-
-    Debug = doc["debug"] | false;
-    Display = parseDisplayConfig(doc["display"]);
-    Timezone = doc["timezone"] | "UTC0";
+    return true;
 }
 
-DisplayConfig Config::parseDisplayConfig(const JsonObjectConst json) {
-    const DisplayConfig defaults;
-    DisplayConfig display;
-
-    display.width = json["width"] | defaults.width;
-    if (display.width < 16 || display.width > 256) {
-        DEBUG_PRINTF("Invalid display width %u, using %u\n", display.width, defaults.width);
-        display.width = defaults.width;
-    }
-
-    display.height = json["height"] | defaults.height;
-    if (display.height != 16 && display.height != 32 && display.height != 64) {
-        DEBUG_PRINTF("Invalid display height %u (expected 16, 32 or 64), using %u\n", display.height, defaults.height);
-        display.height = defaults.height;
-    }
-
-    display.brightness = json["brightness"] | defaults.brightness;
-    if (display.brightness > MaxBrightness) {
-        DEBUG_PRINTF("Brightness %u above the %u limit, using %u\n", display.brightness, MaxBrightness, MaxBrightness);
-        display.brightness = MaxBrightness;
-    }
-    display.doubleBuffer = json["doubleBuffer"] | defaults.doubleBuffer;
-    display.orientation = parseOrientationMode(json["orientation"] | "", defaults.orientation);
-
-    return display;
+void Config::set(const JsonObjectConst json) {
+    const SystemSettings settings = parse(json);
+    std::lock_guard lock(_mutex);
+    _settings = settings;
 }
 
-std::string_view Config::getFilePath() const {
-    return FilePath;
+SystemSettings Config::get() const {
+    std::lock_guard lock(_mutex);
+    return _settings;
 }
 
-bool Config::isDebug() const {
-    return Debug;
-}
+void Config::describe(const JsonObject out) const {
+    write(get(), out["config"].to<JsonObject>());
 
-const DisplayConfig& Config::getDisplayConfig() const {
-    return Display;
-}
-
-const std::string& Config::getTimezone() const {
-    return Timezone;
-}
-
-void Config::onSaved(SavedCallback callback) {
-    OnSaved = std::move(callback);
-}
-
-void Config::save(const uint8_t *data, const size_t len, const size_t index, const size_t total) {
-    if (File file = LittleFS.open(FilePath.data(), (index == 0) ? FILE_WRITE : FILE_APPEND)) {
-        file.write(data, len);
-        file.close();
-    }
-
-    if (index + len == total) {
-        DEBUG_PRINT.println("JSON Settings saved to LittleFS.");
-
-        File checkFile = LittleFS.open(FilePath.data(), FILE_READ);
-        JsonDocument doc;
-        deserializeJson(doc, checkFile);
-        checkFile.close();
-
-        DEBUG_PRINT.println("Reloading config... ");
-        load();
-        if (OnSaved) OnSaved(*this);
-    }
+    const JsonObject limits = out["limits"].to<JsonObject>();
+    limits["panelWidth"] = PanelWidth;
+    limits["panelHeight"] = PanelHeight;
+    limits["maxBrightness"] = MaxBrightness;
 }

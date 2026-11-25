@@ -10,8 +10,7 @@ struct WifiCredentials {
     std::string password;  // empty for open networks
 };
 
-/// WiFi settings kept in NVS (flash key-value storage). Unlike config.json on LittleFS, NVS
-/// survives "pio run -t uploadfs" and firmware updates.
+/// WiFi settings, kept in NVS so they survive firmware and file system updates.
 namespace WifiStore {
     /// The network to join; ssid is empty until one has been set up.
     WifiCredentials load();
@@ -28,6 +27,9 @@ namespace WifiStore {
 
     /// SSIDs are 1-32 bytes; WPA2 passwords are empty (open network) or 8-63 characters.
     bool isValid(const WifiCredentials& credentials);
+    /// What isValid() asks for, to tell whoever typed the credentials
+    constexpr const char* ValidityRule =
+        "The network name must be 1 to 32 characters, and the password empty or 8 to 63 characters";
 }
 
 #endif
